@@ -6,15 +6,25 @@
 #include "Draw.h"
 #include "Mailer.h"
 
+std::string sanitizeFilename(std::string s)
+{
+    for (char& c : s)
+    {
+        if (c == ' ')
+            c = '_';
+    }
+    return s;
+}
+
 int main()
 {
     std::cout << "=== Secret Santa ===\n";
 
     std::string username;
     std::cout << "Nom du profil : ";
-    std::cin >> username;
+    std::getline(std::cin >> std::ws,username);
 
-    std::string profileFile = "Profiles/" + username + ".json";
+    std::string profileFile = "Profiles/" + sanitizeFilename(username) + ".json";
     Profile profile;
 
     // =========================
@@ -27,7 +37,13 @@ int main()
         std::cout << "1. Charger le profil\n";
         std::cout << "2. Creer un nouveau profil\n";
         std::cout << "Choix : ";
-        std::cin >> choice;
+        while (!(std::cin >> choice) || choice <= 0)
+        {
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::cout << "Nombre invalide, recommence : ";
+        }
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
         if (choice == 1)
         {
@@ -63,32 +79,43 @@ int main()
         std::cout << "2. Charger un crew " << std::endl;
         std::cout << "3. Quitter " << std::endl;
         std::cout << "Choix : ";
-        std::cin >> menu;
+        while (!(std::cin >> menu) || menu <= 0)
+        {
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::cout << "Nombre invalide, recommence : ";
+        }
 
         if (menu == 1)
         {
             std::string crewName;
             std::cout << "Nom du crew : ";
-            std::cin >> crewName;
+            std::getline(std::cin >> std::ws, crewName);
 
             Crew crew(crewName);
 
             int nbParticipants;
             std::cout << "Nombre de participants : ";
-            std::cin >> nbParticipants;
+            while (!(std::cin >> nbParticipants) || nbParticipants <= 0)
+            {
+                std::cin.clear();
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                std::cout << "Nombre invalide, recommence : ";
+            }
 
             for (int i = 0; i < nbParticipants; i++)
             {
                 std::string name, email;
                 std::cout << "Nom participant " << i + 1 << " : ";
-                std::cin >> name;
+                std::getline(std::cin >> std::ws, name);
                 std::cout << "Email : ";
                 std::cin >> email;
 
                 crew.addUser(Users(name, email));
             }
 
-            std::string crewFile = "Crews/" + crewName + ".json";
+            std::string crewFile =
+                "Crews/" + sanitizeFilename(crewName) + ".json";
             Save::saveCrew(crew, crewFile);
             profile.addCrewFile(crewFile);
             Save::saveProfile(profile, profileFile);
