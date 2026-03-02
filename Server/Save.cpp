@@ -1,8 +1,7 @@
 #include "Save.h"
 #include <fstream>
 #include <iostream>
-#include "../external/json.hpp"
-
+#include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
 //bool Save::saveProfile(const Profile& profile, const std::string& filename)
