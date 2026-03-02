@@ -1,3 +1,4 @@
+#include <limits>
 #include <iostream>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -7,6 +8,29 @@
 #pragma comment(lib, "ws2_32.lib")
 
 using json = nlohmann::json;
+
+void printServerResponse(const std::string& resp)
+{
+    json res = json::parse(resp);
+
+    if (!res.contains("status"))
+    {
+        std::cout << "[ERREUR] Reponse invalide\n";
+        return;
+    }
+
+    std::string status = res["status"];
+
+    if (status == "OK")
+        std::cout << "[OK] ";
+    else
+        std::cout << "[ERREUR] ";
+
+    if (res.contains("message"))
+        std::cout << res["message"];
+
+    std::cout << std::endl;
+}
 
 int main()
 {
@@ -26,7 +50,7 @@ int main()
         return -1;
     }
 
-    std::cout << "Connecte au serveur\n";
+    std::cout << "Connectxion au serveur etablie !\n";
 
     bool running = true;
 
@@ -44,22 +68,28 @@ int main()
 
         if (choice == 1)
         {
-            std::string crewName;
+            std::string crewName, name, email;
+
             std::cout << "Nom du crew : ";
-            std::cin >> crewName;
+            std::getline(std::cin >> std::ws, crewName);
+
+            std::cout << "Ton nom : ";
+            std::getline(std::cin >> std::ws, name);
+
+            std::cout << "Ton email : ";
+            std::getline(std::cin >> std::ws, email);
 
             json req;
             req["action"] = "CREATE_CREW";
             req["crew_name"] = crewName;
+            req["user"]["name"] = name;
+            req["user"]["email"] = email;
 
             sendJson(sock, req.dump());
 
             std::string resp;
             recvJson(sock, resp);
-
-            json res = json::parse(resp);
-            std::cout << "Invite code : "
-                << res["invite_code"] << "\n";
+            printServerResponse(resp);
         }
         else if (choice == 2)
         {
@@ -79,12 +109,9 @@ int main()
             req["user"]["email"] = email;
 
             sendJson(sock, req.dump());
-
             std::string resp;
             recvJson(sock, resp);
-
-            json res = json::parse(resp);
-            std::cout << res.dump(4) << "\n";
+            printServerResponse(resp);
         }
         else if (choice == 3)
         {
@@ -101,9 +128,7 @@ int main()
 
             std::string resp;
             recvJson(sock, resp);
-
-            json res = json::parse(resp);
-            std::cout << res["message"] << std::endl;
+            printServerResponse(resp);
         }
         else if (choice == 4)
         {
@@ -119,10 +144,7 @@ int main()
 
             std::string resp;
             recvJson(sock, resp);
-
-            json res = json::parse(resp);
-            std::cout << res["message"] << std::endl;
-
+            printServerResponse(resp);
         }
         else if (choice == 5)
         {

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <string>
-
+#include <fstream>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -19,6 +19,40 @@ using json = nlohmann::json;
 // =========================
 // Génération code invitation
 // =========================
+
+static const char* INVITES_FILE = "ServerData/invites.json";
+
+static void saveInvites(const std::unordered_map<std::string, std::string>& invites)
+{
+    json j = json::object();
+    for (const auto& kv : invites)
+        j[kv.first] = kv.second;
+
+    std::ofstream out(INVITES_FILE);
+    out << j.dump(4);
+}
+
+static void loadInvites(std::unordered_map<std::string, std::string>& invites)
+{
+    invites.clear();
+
+    std::ifstream in(INVITES_FILE);
+    if (!in.is_open())
+        return;
+
+    try
+    {
+        json j;
+        in >> j;
+
+        for (auto it = j.begin(); it != j.end(); ++it)
+            invites[it.key()] = it.value().get<std::string>();
+    }
+    catch (...)
+    {
+        invites.clear(); // fichier corrompu => on repart vide
+    }
+}
 
 const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
 
@@ -66,6 +100,8 @@ int main()
 
     // invite_code -> chemin du crew
     std::unordered_map<std::string, std::string> invites;
+    loadInvites(invites);
+    std::cout << "Invites charges: " << invites.size() << "\n";
 
     while (true)
     {
@@ -116,13 +152,29 @@ int main()
                 std::string crewFile = "ServerData/Crews/" + inviteCode + ".json";
 
                 Crew crew(crewName);
+
+                if (request.contains("user"))
+                {
+                    json u = request["user"];
+                    if (u.contains("name") && u.contains("email"))
+                    {
+                        Users creator(u["name"].get<std::string>(), u["email"].get<std::string>());
+                        crew.addUser(creator);
+                    }
+                }
+
                 Save::saveCrew(crew, crewFile);
 
                 invites[inviteCode] = crewFile;
+                saveInvites(invites); // si tu as la persistance des invites
 
                 json resp;
                 resp["status"] = "OK";
                 resp["invite_code"] = inviteCode;
+
+                // optionnel : pour feedback UX
+                resp["participants_count"] = crew.getUsers().size();
+
                 sendJson(client, resp.dump());
             }
             else if (action == "JOIN_CREW")
@@ -155,7 +207,10 @@ int main()
                 crew.addUser(user);
                 Save::saveCrew(crew, it->second);
 
-                sendJson(client, R"({"status":"OK"})");
+                json resp;
+                resp["status"] = "OK";
+                resp["participants_count"] = crew.getUsers().size();
+                sendJson(client, resp.dump());
             }
             else if (action == "RUN_DRAW")
             {
@@ -183,6 +238,12 @@ int main()
                 Crew crew;
                 Save::loadCrew(crew, it->second);
 
+                if (crew.getUsers().size() < 3)
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Minimum 3 participants requis"})");
+                    continue;
+                }
+
                 Draw draw;
                 if (!draw.run(crew))
                 {
@@ -198,11 +259,6 @@ int main()
 
                 sendJson(client, R"({"status":"OK","message":"Tirage effectue"})");
             }
-            else
-            {
-                sendJson(client, R"({"status":"ERROR","message":"Action inconnue"})");
-            }
-        }
 
         close(client);
         std::cout << "Client déconnecté\n";
