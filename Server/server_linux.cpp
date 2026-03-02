@@ -259,7 +259,12 @@ int main()
 
                 sendJson(client, R"({"status":"OK","message":"Tirage effectue"})");
             }
+            else
+            {
+                sendJson(client, R"({"status":"ERROR","message":"Action inconnue"})");
+            }
 
+        }
         close(client);
         std::cout << "Client déconnecté\n";
     }
