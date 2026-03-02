@@ -12,6 +12,7 @@ using json = nlohmann::json;
 void printServerResponse(const std::string& resp)
 {
     json res = json::parse(resp);
+    std::cout << res.dump(4) << "\n";
 
     if (!res.contains("status"))
     {
@@ -19,17 +20,22 @@ void printServerResponse(const std::string& resp)
         return;
     }
 
-    std::string status = res["status"];
+    std::string status = res["status"].get<std::string>();
 
     if (status == "OK")
-        std::cout << "[OK] ";
+        std::cout << "[OK]\n";
     else
-        std::cout << "[ERREUR] ";
+        std::cout << "[ERREUR]\n";
 
+    // Message générique si présent
     if (res.contains("message"))
-        std::cout << res["message"];
+        std::cout << res["message"].get<std::string>() << "\n";
 
-    std::cout << std::endl;
+    if (res.contains("invite_code"))
+        std::cout << "Invite code : " << res["invite_code"].get<std::string>() << "\n";
+
+    if (res.contains("participants_count"))
+        std::cout << "Participants actuels : " << res["participants_count"] << "\n";
 }
 
 int main()
