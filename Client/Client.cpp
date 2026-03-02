@@ -95,6 +95,7 @@ int main()
             json req;
             req["action"] = "RUN_DRAW";
             req["invite_code"] = code;
+            req["admin_token"] = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
 
             sendJson(sock, req.dump());
 
