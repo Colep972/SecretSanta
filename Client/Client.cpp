@@ -18,7 +18,7 @@ int main()
     sockaddr_in server{};
     server.sin_family = AF_INET;
     server.sin_port = htons(54000);
-    InetPton(AF_INET, L"127.0.0.1", &server.sin_addr);
+    InetPton(AF_INET, L"100.114.253.106", &server.sin_addr);
 
     if (connect(sock, (sockaddr*)&server, sizeof(server)) == SOCKET_ERROR)
     {
