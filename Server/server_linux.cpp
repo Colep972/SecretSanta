@@ -19,6 +19,9 @@ using json = nlohmann::json;
 // =========================
 // Génération code invitation
 // =========================
+
+const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
+
 static std::string generateInviteCode()
 {
     static const char chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -156,6 +159,13 @@ int main()
             }
             else if (action == "RUN_DRAW")
             {
+                if (!request.contains("admin_token") ||
+                    request["admin_token"].get<std::string>() != ADMIN_TOKEN)
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Non autorise"})");
+                    continue;
+                }
+
                 if (!request.contains("invite_code"))
                 {
                     sendJson(client, R"({"status":"ERROR","message":"invite_code manquant"})");

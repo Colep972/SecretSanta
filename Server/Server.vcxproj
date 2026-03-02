@@ -128,7 +128,7 @@
     <ClCompile Include="Mailer.cpp" />
     <ClCompile Include="NetworkUtils.cpp" />
     <ClCompile Include="Save.cpp" />
-    <ClCompile Include="Server.cpp" />
+    <ClCompile Include="server_linux.cpp" />
     <ClCompile Include="Users.cpp" />
   </ItemGroup>
   <ItemGroup>
