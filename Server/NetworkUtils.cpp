@@ -1,12 +1,13 @@
 #include "NetworkUtils.h"
 
-bool sendJson(SOCKET sock, const std::string& json)
+bool sendJson(SocketType sock, const std::string& json)
 {
     std::string msg = json + "\n";
-    return send(sock, msg.c_str(), msg.size(), 0) != SOCKET_ERROR;
+    int result = send(sock, msg.c_str(), msg.size(), 0);
+    return result >= 0;
 }
 
-bool recvJson(SOCKET sock, std::string& json)
+bool recvJson(SocketType sock, std::string& json)
 {
     char c;
     json.clear();
