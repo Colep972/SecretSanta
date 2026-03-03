@@ -71,6 +71,8 @@ int main()
     srand((unsigned)time(nullptr));
 
     int listening = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(listening, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     if (listening < 0)
     {
         std::cerr << "socket() failed\n";
