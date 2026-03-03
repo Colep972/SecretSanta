@@ -16,6 +16,7 @@ using json = nlohmann::json;
 #include "Users.h"
 #include "Save.h"
 #include "Draw.h"
+#include "Mailer.h"
 
 // =========================
 // Génération code invitation
