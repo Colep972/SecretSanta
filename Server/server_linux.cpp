@@ -281,7 +281,7 @@ int main()
                 Crew crew;
                 Save::loadCrew(crew, it->second);
 
-                std::unordered_map<std::string, std::string> results;
+                std::map<std::string, std::string> results;
                 if (!Save::loadDrawResult(it->second, results))
                 {
                     sendJson(client, R"({"status":"ERROR","message":"Tirage introuvable"})");
