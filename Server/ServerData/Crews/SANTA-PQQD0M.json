@@ -1,0 +1,25 @@
+{
+    "draw": {
+        "Colep": "Mathieu",
+        "Mathieu": "joakim",
+        "joakim": "Colep"
+    },
+    "name": "ColepTest",
+    "users": [
+        {
+            "email": "joakim.alves@live.fr",
+            "name": "Colep",
+            "wishes": []
+        },
+        {
+            "email": "joakim.alves972@gmail.com",
+            "name": "Mathieu",
+            "wishes": []
+        },
+        {
+            "email": "malvesdacosta@gaming.tech",
+            "name": "joakim",
+            "wishes": []
+        }
+    ]
+}
