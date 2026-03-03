@@ -259,6 +259,41 @@ int main()
 
                 sendJson(client, R"({"status":"OK","message":"Tirage effectue"})");
             }
+            else if (action == "SEND_EMAILS")
+            {
+                if (!request.contains("invite_code"))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"invite_code manquant"})");
+                    continue;
+                }
+
+                std::string inviteCode = request["invite_code"].get<std::string>();
+                auto it = invites.find(inviteCode);
+                if (it == invites.end())
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Code invalide"})");
+                    continue;
+                }
+
+                Crew crew;
+                Save::loadCrew(crew, it->second);
+
+                std::unordered_map<std::string, std::string> results;
+                if (!Save::loadDrawResult(it->second, results))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Tirage introuvable"})");
+                    continue;
+                }
+
+                Mailer mailer;
+                if (!mailer.send(crew, results))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Erreur envoi emails"})");
+                    continue;
+                }
+
+                sendJson(client, R"({"status":"OK","message":"Emails envoyes"})");
+                }
             else
             {
                 sendJson(client, R"({"status":"ERROR","message":"Action inconnue"})");
