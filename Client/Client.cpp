@@ -11,11 +11,38 @@
 using json = nlohmann::json;
 
 // ── Session state ─────────────────────────────────────────────────────────────
-static std::string g_inviteCode;
-static std::string g_token;
-static std::string g_name;
-static bool        g_isAdmin = false;
+static std::string m_inviteCode;
+static std::string m_token;
+static std::string m_name;
+static bool        m_isAdmin = false;
+static int         m_participantCount = 0;
+static bool        m_drawDone = false;
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Fetch participant count and draw status from server, update globals
+static void refreshCrewStatus(SOCKET sock)
+{
+    if (m_inviteCode.empty()) return;
+
+    json req;
+    req["action"] = "GET_CREW_STATUS";
+    req["invite_code"] = m_inviteCode;
+    sendJson(sock, req.dump());
+
+    std::string resp;
+    recvJson(sock, resp);
+
+    try
+    {
+        json res = json::parse(resp);
+        if (res["status"] == "OK")
+        {
+            m_participantCount = res["participants_count"].get<int>();
+            m_drawDone = res["draw_done"].get<bool>();
+        }
+    }
+    catch (...) {}
+}
 
 void printServerResponse(const std::string& resp)
 {
@@ -65,7 +92,7 @@ void printServerResponse(const std::string& resp)
 
 static bool requireSession()
 {
-    if (!g_inviteCode.empty() && !g_token.empty())
+    if (!m_inviteCode.empty() && !m_token.empty())
         return true;
 
     std::cout << "  [!] Vous devez d'abord creer ou rejoindre un crew.\n";
@@ -97,21 +124,23 @@ int main()
     {
         std::cout << "\n";
 
-        if (!g_inviteCode.empty())
-            std::cout << "  [Session : " << g_name << " | crew " << g_inviteCode << "]\n\n";
+        if (!m_inviteCode.empty())
+            std::cout << "  [Session : " << m_name << " | crew " << m_inviteCode << "]\n\n";
 
         std::cout << "  1. Creer un crew\n";
         std::cout << "  2. Se connecter a un crew\n";
         std::cout << "  3. Rejoindre un crew\n";
 
-        if (g_isAdmin)
+        if (m_isAdmin)
         {
             std::cout << "  -----------------------------\n";
-            std::cout << "  4. Lancer le tirage (admin)\n";
-            std::cout << "  5. Envoyer les emails (admin)\n";
+            if (m_participantCount >= 3)
+                std::cout << "  4. Lancer le tirage (admin)\n";
+            if (m_drawDone)
+                std::cout << "  5. Envoyer les emails (admin)\n";
         }
 
-        if (!g_inviteCode.empty())
+        if (!m_inviteCode.empty())
         {
             std::cout << "  -----------------------------\n";
             std::cout << "  6. Voir ma liste de voeux\n";
@@ -156,11 +185,12 @@ int main()
             json res = json::parse(resp);
             if (res["status"] == "OK")
             {
-                g_inviteCode = res["invite_code"].get<std::string>();
-                g_token = res["token"].get<std::string>();
-                g_name = name;
-                g_isAdmin = true; // creator is always owner
-                std::cout << "  Votre token (notez-le) : " << g_token << "\n";
+                m_inviteCode = res["invite_code"].get<std::string>();
+                m_token = res["token"].get<std::string>();
+                m_name = name;
+                m_isAdmin = true; // creator is always owner
+                std::cout << "  Votre token (notez-le) : " << m_token << "\n";
+                refreshCrewStatus(sock);
             }
         }
         // ── 2. LOGIN CREW (already a member, reconnect by token) ──────────────
@@ -188,12 +218,13 @@ int main()
             json res = json::parse(resp);
             if (res["status"] == "OK")
             {
-                g_inviteCode = code;
-                g_token = token;
-                g_name = res["name"].get<std::string>();
-                g_isAdmin = res.value("is_owner", false);
-                std::cout << "[OK]\n  Session restauree ! Bienvenue " << g_name << "\n";
-                if (g_isAdmin) std::cout << "  Mode admin active.\n";
+                m_inviteCode = code;
+                m_token = token;
+                m_name = res["name"].get<std::string>();
+                m_isAdmin = res.value("is_owner", false);
+                std::cout << "[OK]\n  Session restauree ! Bienvenue " << m_name << "\n";
+                if (m_isAdmin) std::cout << "  Mode admin active.\n";
+                refreshCrewStatus(sock);
             }
             else
             {
@@ -229,17 +260,18 @@ int main()
             json res = json::parse(resp);
             if (res["status"] == "OK")
             {
-                g_inviteCode = code;
-                g_token = res["token"].get<std::string>();
-                g_name = name;
-                g_isAdmin = res.value("is_owner", false);
-                std::cout << "  Votre token (notez-le) : " << g_token << "\n";
+                m_inviteCode = code;
+                m_token = res["token"].get<std::string>();
+                m_name = name;
+                m_isAdmin = res.value("is_owner", false);
+                std::cout << "  Votre token (notez-le) : " << m_token << "\n";
+                refreshCrewStatus(sock);
             }
         }
         // ── 4. RUN DRAW (admin only) ──────────────────────────────────────────
         else if (choice == 4)
         {
-            if (!g_isAdmin) { std::cout << "  [!] Acces refuse.\n"; continue; }
+            if (!m_isAdmin) { std::cout << "  [!] Acces refuse.\n"; continue; }
 
             std::string code;
             std::cout << "Code du crew : ";
@@ -255,11 +287,16 @@ int main()
             std::string resp;
             recvJson(sock, resp);
             printServerResponse(resp);
+
+            // Unlock "send emails" option if draw succeeded
+            json res = json::parse(resp);
+            if (res["status"] == "OK")
+                refreshCrewStatus(sock);
         }
         // ── 5. SEND EMAILS (admin only) ───────────────────────────────────────
         else if (choice == 5)
         {
-            if (!g_isAdmin) { std::cout << "  [!] Acces refuse.\n"; continue; }
+            if (!m_isAdmin) { std::cout << "  [!] Acces refuse.\n"; continue; }
 
             std::string code;
             std::cout << "Code du crew : ";
@@ -282,8 +319,8 @@ int main()
 
             json req;
             req["action"] = "GET_WISHES";
-            req["invite_code"] = g_inviteCode;
-            req["token"] = g_token;
+            req["invite_code"] = m_inviteCode;
+            req["token"] = m_token;
 
             sendJson(sock, req.dump());
 
@@ -302,8 +339,8 @@ int main()
 
             json req;
             req["action"] = "ADD_WISH";
-            req["invite_code"] = g_inviteCode;
-            req["token"] = g_token;
+            req["invite_code"] = m_inviteCode;
+            req["token"] = m_token;
             req["wish"] = wish;
 
             sendJson(sock, req.dump());
@@ -321,8 +358,8 @@ int main()
             {
                 json req;
                 req["action"] = "GET_WISHES";
-                req["invite_code"] = g_inviteCode;
-                req["token"] = g_token;
+                req["invite_code"] = m_inviteCode;
+                req["token"] = m_token;
                 sendJson(sock, req.dump());
                 std::string resp;
                 recvJson(sock, resp);
@@ -343,8 +380,8 @@ int main()
 
             json req;
             req["action"] = "REMOVE_WISH";
-            req["invite_code"] = g_inviteCode;
-            req["token"] = g_token;
+            req["invite_code"] = m_inviteCode;
+            req["token"] = m_token;
             req["index"] = index;
 
             sendJson(sock, req.dump());

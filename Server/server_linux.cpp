@@ -469,6 +469,36 @@ int main()
                 resp["wishes"] = user->getWishes();
                 sendJson(client, resp.dump());
             }
+            else if (action == "GET_CREW_STATUS")
+            {
+                // Required: invite_code
+                // Returns participant count and whether draw has been done
+                if (!request.contains("invite_code"))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"invite_code requis"})");
+                    continue;
+                }
+
+                std::string inviteCode = request["invite_code"].get<std::string>();
+                auto it = invites.find(inviteCode);
+                if (it == invites.end())
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Code invalide"})");
+                    continue;
+                }
+
+                Crew crew;
+                Save::loadCrew(crew, it->second);
+
+                std::map<std::string, std::string> drawResults;
+                bool drawDone = Save::loadDrawResult(it->second, drawResults);
+
+                json resp;
+                resp["status"] = "OK";
+                resp["participants_count"] = crew.getUsers().size();
+                resp["draw_done"] = drawDone;
+                sendJson(client, resp.dump());
+            }
             else
             {
                 sendJson(client, R"({"status":"ERROR","message":"Action inconnue"})");
@@ -476,7 +506,7 @@ int main()
 
         }
         close(client);
-        std::cout << "Client déconnecté\n";
+        std::cout << "Client d�connect�\n";
     }
 
     close(listening);
