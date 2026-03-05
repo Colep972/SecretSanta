@@ -166,6 +166,10 @@ int main()
 
                 Crew crew(crewName);
 
+                json resp;
+                resp["status"] = "OK";
+                resp["invite_code"] = inviteCode;
+
                 if (request.contains("user"))
                 {
                     json u = request["user"];
@@ -182,13 +186,8 @@ int main()
                 Save::saveCrew(crew, crewFile);
 
                 invites[inviteCode] = crewFile;
-                saveInvites(invites); // si tu as la persistance des invites
+                saveInvites(invites);
 
-                json resp;
-                resp["status"] = "OK";
-                resp["invite_code"] = inviteCode;
-
-                // optionnel : pour feedback UX
                 resp["participants_count"] = crew.getUsers().size();
 
                 sendJson(client, resp.dump());
