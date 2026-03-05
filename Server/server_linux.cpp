@@ -471,7 +471,7 @@ int main()
 
         }
         close(client);
-        std::cout << "Client d�connect�\n";
+        std::cout << "Client déconnecté\n";
     }
 
     close(listening);
