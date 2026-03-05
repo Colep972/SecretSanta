@@ -81,6 +81,7 @@ bool Save::saveCrew(const Crew& crew, const std::string& filename)
 {
     json j;
     j["name"] = crew.getName();
+    j["owner_token"] = crew.getOwnerToken();
     j["users"] = json::array();
 
     for (const auto& user : crew.getUsers())
@@ -113,6 +114,9 @@ bool Save::loadCrew(Crew& crew, const std::string& filename)
     file >> j;
 
     crew = Crew(j["name"]);
+
+    if (j.contains("owner_token"))
+        crew.setOwnerToken(j["owner_token"].get<std::string>());
 
     for (const auto& ju : j["users"])
     {

@@ -179,6 +179,9 @@ int main()
                         creator.setToken(generateToken());
                         crew.addUser(creator);
 
+                        // First user is the owner
+                        crew.setOwnerToken(creator.getToken());
+                        resp["is_owner"] = true;
                         resp["token"] = creator.getToken();
                     }
                 }
@@ -226,6 +229,7 @@ int main()
                 json resp;
                 resp["status"] = "OK";
                 resp["token"] = user.getToken();
+                resp["is_owner"] = false;
                 resp["participants_count"] = crew.getUsers().size();
                 sendJson(client, resp.dump());
             }
@@ -344,6 +348,7 @@ int main()
                 json resp;
                 resp["status"] = "OK";
                 resp["token"] = user->getToken();
+                resp["is_owner"] = (user->getToken() == crew.getOwnerToken());
                 resp["participants_count"] = crew.getUsers().size();
                 sendJson(client, resp.dump());
             }

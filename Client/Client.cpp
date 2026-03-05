@@ -10,11 +10,11 @@
 
 using json = nlohmann::json;
 
-// ─── Session state ────────────────────────────────────────────────────────────
-// Stored after CREATE_CREW or JOIN_CREW so the user doesn't retype them each time
+// ── Session state ─────────────────────────────────────────────────────────────
 static std::string g_inviteCode;
 static std::string g_token;
 static std::string g_name;
+static bool        g_isAdmin = false;
 // ─────────────────────────────────────────────────────────────────────────────
 
 void printServerResponse(const std::string& resp)
@@ -36,17 +36,15 @@ void printServerResponse(const std::string& resp)
         std::cout << "  " << res["message"].get<std::string>() << "\n";
 
     if (res.contains("invite_code"))
-        std::cout << "  Code crew      : " << res["invite_code"].get<std::string>() << "\n";
+        std::cout << "  Code crew    : " << res["invite_code"].get<std::string>() << "\n";
 
-    if (res.contains("token"))
-        std::cout << "  Votre token    : " << res["token"].get<std::string>()
-        << "  (conservez-le !)\n";
+    // Token is intentionally NOT displayed here
 
     if (res.contains("participants_count"))
-        std::cout << "  Participants   : " << res["participants_count"] << "\n";
+        std::cout << "  Participants : " << res["participants_count"] << "\n";
 
     if (res.contains("name"))
-        std::cout << "  Profil de      : " << res["name"].get<std::string>() << "\n";
+        std::cout << "  Profil de    : " << res["name"].get<std::string>() << "\n";
 
     if (res.contains("wishes"))
     {
@@ -65,13 +63,12 @@ void printServerResponse(const std::string& resp)
     }
 }
 
-// Helper: ensure the user has joined/created a crew this session
-static bool requireSession(SOCKET sock)
+static bool requireSession()
 {
     if (!g_inviteCode.empty() && !g_token.empty())
         return true;
 
-    std::cout << "  [!] Vous devez d'abord creer ou rejoindre un crew (options 1 ou 2).\n";
+    std::cout << "  [!] Vous devez d'abord creer ou rejoindre un crew.\n";
     return false;
 }
 
@@ -100,15 +97,20 @@ int main()
     {
         std::cout << "\n";
 
-        // Show session status if logged in
         if (!g_inviteCode.empty())
             std::cout << "  [Session : " << g_name << " | crew " << g_inviteCode << "]\n\n";
 
         std::cout << "  1. Creer un crew\n";
         std::cout << "  2. Se connecter a un crew\n";
         std::cout << "  3. Rejoindre un crew\n";
-        std::cout << "  4. Lancer le tirage (admin)\n";
-        std::cout << "  5. Envoyer les emails (admin)\n";
+
+        if (g_isAdmin)
+        {
+            std::cout << "  -----------------------------\n";
+            std::cout << "  4. Lancer le tirage (admin)\n";
+            std::cout << "  5. Envoyer les emails (admin)\n";
+        }
+
         if (!g_inviteCode.empty())
         {
             std::cout << "  -----------------------------\n";
@@ -116,6 +118,7 @@ int main()
             std::cout << "  7. Ajouter un voeu\n";
             std::cout << "  8. Supprimer un voeu\n";
         }
+
         std::cout << "  -----------------------------\n";
         std::cout << "  9. Quitter\n";
         std::cout << "  Choix : ";
@@ -150,44 +153,51 @@ int main()
             recvJson(sock, resp);
             printServerResponse(resp);
 
-            // Save session
             json res = json::parse(resp);
             if (res["status"] == "OK")
             {
                 g_inviteCode = res["invite_code"].get<std::string>();
                 g_token = res["token"].get<std::string>();
                 g_name = name;
+                g_isAdmin = true; // creator is always owner
+                std::cout << "  Votre token (notez-le) : " << g_token << "\n";
             }
         }
-        // ── 2. LOGIN CREW (already a member) ─────────────────────────────────
+        // ── 2. LOGIN CREW (already a member, reconnect by token) ──────────────
         else if (choice == 2)
         {
-            std::string code, name;
+            std::string code, token;
 
             std::cout << "Code du crew : ";
             std::getline(std::cin, code);
 
-            std::cout << "Ton nom      : ";
-            std::getline(std::cin, name);
+            std::cout << "Votre token  : ";
+            std::getline(std::cin, token);
 
+            // Verify token against server by fetching wishes
             json req;
-            req["action"] = "LOGIN_CREW";
+            req["action"] = "GET_WISHES";
             req["invite_code"] = code;
-            req["name"] = name;
+            req["token"] = token;
 
             sendJson(sock, req.dump());
 
             std::string resp;
             recvJson(sock, resp);
-            printServerResponse(resp);
 
             json res = json::parse(resp);
             if (res["status"] == "OK")
             {
                 g_inviteCode = code;
-                g_token = res["token"].get<std::string>();
-                g_name = name;
-                std::cout << "  Session restauree !\n";
+                g_token = token;
+                g_name = res["name"].get<std::string>();
+                g_isAdmin = res.value("is_owner", false);
+                std::cout << "[OK]\n  Session restauree ! Bienvenue " << g_name << "\n";
+                if (g_isAdmin) std::cout << "  Mode admin active.\n";
+            }
+            else
+            {
+                std::cout << "[ERREUR]\n  Token ou code invalide.\n";
             }
         }
         // ── 3. JOIN CREW (new member) ─────────────────────────────────────────
@@ -216,18 +226,21 @@ int main()
             recvJson(sock, resp);
             printServerResponse(resp);
 
-            // Save session
             json res = json::parse(resp);
             if (res["status"] == "OK")
             {
                 g_inviteCode = code;
                 g_token = res["token"].get<std::string>();
                 g_name = name;
+                g_isAdmin = res.value("is_owner", false);
+                std::cout << "  Votre token (notez-le) : " << g_token << "\n";
             }
         }
-        // ── 4. RUN DRAW ───────────────────────────────────────────────────────
+        // ── 4. RUN DRAW (admin only) ──────────────────────────────────────────
         else if (choice == 4)
         {
+            if (!g_isAdmin) { std::cout << "  [!] Acces refuse.\n"; continue; }
+
             std::string code;
             std::cout << "Code du crew : ";
             std::getline(std::cin, code);
@@ -243,9 +256,11 @@ int main()
             recvJson(sock, resp);
             printServerResponse(resp);
         }
-        // ── 5. SEND EMAILS ────────────────────────────────────────────────────
+        // ── 5. SEND EMAILS (admin only) ───────────────────────────────────────
         else if (choice == 5)
         {
+            if (!g_isAdmin) { std::cout << "  [!] Acces refuse.\n"; continue; }
+
             std::string code;
             std::cout << "Code du crew : ";
             std::getline(std::cin, code);
@@ -263,7 +278,7 @@ int main()
         // ── 6. GET WISHES ─────────────────────────────────────────────────────
         else if (choice == 6)
         {
-            if (!requireSession(sock)) continue;
+            if (!requireSession()) continue;
 
             json req;
             req["action"] = "GET_WISHES";
@@ -279,7 +294,7 @@ int main()
         // ── 7. ADD WISH ───────────────────────────────────────────────────────
         else if (choice == 7)
         {
-            if (!requireSession(sock)) continue;
+            if (!requireSession()) continue;
 
             std::string wish;
             std::cout << "Votre voeu : ";
@@ -300,9 +315,9 @@ int main()
         // ── 8. REMOVE WISH ────────────────────────────────────────────────────
         else if (choice == 8)
         {
-            if (!requireSession(sock)) continue;
+            if (!requireSession()) continue;
 
-            // First show current wishes so user knows the indices
+            // Show current wishes first so user knows the indices
             {
                 json req;
                 req["action"] = "GET_WISHES";

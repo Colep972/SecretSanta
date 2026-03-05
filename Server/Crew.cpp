@@ -12,6 +12,8 @@ void Crew::addUser(const Users& user)
 const std::vector<Users>& Crew::getUsers() const { return m_users; }
 std::vector<Users>& Crew::getUsers() { return m_users; }
 const std::string& Crew::getName() const { return m_name; }
+const std::string& Crew::getOwnerToken() const { return m_ownerToken; }
+void Crew::setOwnerToken(const std::string& token) { m_ownerToken = token; }
 
 Users* Crew::findUserByToken(const std::string& token)
 {
