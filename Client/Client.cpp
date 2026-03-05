@@ -1,4 +1,5 @@
-﻿#include <limits>
+﻿#define NOMINMAX   // prevent Windows.h from defining min/max macros
+#include <limits>
 #include <iostream>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -104,15 +105,19 @@ int main()
             std::cout << "  [Session : " << g_name << " | crew " << g_inviteCode << "]\n\n";
 
         std::cout << "  1. Creer un crew\n";
-        std::cout << "  2. Rejoindre un crew\n";
-        std::cout << "  3. Lancer le tirage (admin)\n";
-        std::cout << "  4. Envoyer les emails (admin)\n";
-        std::cout << "  ─────────────────────────────\n";
-        std::cout << "  5. Voir ma liste de voeux\n";
-        std::cout << "  6. Ajouter un voeu\n";
-        std::cout << "  7. Supprimer un voeu\n";
-        std::cout << "  ─────────────────────────────\n";
-        std::cout << "  8. Quitter\n";
+        std::cout << "  2. Se connecter a un crew\n";
+        std::cout << "  3. Rejoindre un crew\n";
+        std::cout << "  4. Lancer le tirage (admin)\n";
+        std::cout << "  5. Envoyer les emails (admin)\n";
+        if (!g_inviteCode.empty())
+        {
+            std::cout << "  -----------------------------\n";
+            std::cout << "  6. Voir ma liste de voeux\n";
+            std::cout << "  7. Ajouter un voeu\n";
+            std::cout << "  8. Supprimer un voeu\n";
+        }
+        std::cout << "  -----------------------------\n";
+        std::cout << "  9. Quitter\n";
         std::cout << "  Choix : ";
 
         int choice;
@@ -154,8 +159,39 @@ int main()
                 g_name = name;
             }
         }
-        // ── 2. JOIN CREW ──────────────────────────────────────────────────────
+        // ── 2. LOGIN CREW (already a member) ─────────────────────────────────
         else if (choice == 2)
+        {
+            std::string code, name;
+
+            std::cout << "Code du crew : ";
+            std::getline(std::cin, code);
+
+            std::cout << "Ton nom      : ";
+            std::getline(std::cin, name);
+
+            json req;
+            req["action"] = "LOGIN_CREW";
+            req["invite_code"] = code;
+            req["name"] = name;
+
+            sendJson(sock, req.dump());
+
+            std::string resp;
+            recvJson(sock, resp);
+            printServerResponse(resp);
+
+            json res = json::parse(resp);
+            if (res["status"] == "OK")
+            {
+                g_inviteCode = code;
+                g_token = res["token"].get<std::string>();
+                g_name = name;
+                std::cout << "  Session restauree !\n";
+            }
+        }
+        // ── 3. JOIN CREW (new member) ─────────────────────────────────────────
+        else if (choice == 3)
         {
             std::string code, name, email;
 
@@ -189,8 +225,8 @@ int main()
                 g_name = name;
             }
         }
-        // ── 3. RUN DRAW ───────────────────────────────────────────────────────
-        else if (choice == 3)
+        // ── 4. RUN DRAW ───────────────────────────────────────────────────────
+        else if (choice == 4)
         {
             std::string code;
             std::cout << "Code du crew : ";
@@ -207,8 +243,8 @@ int main()
             recvJson(sock, resp);
             printServerResponse(resp);
         }
-        // ── 4. SEND EMAILS ────────────────────────────────────────────────────
-        else if (choice == 4)
+        // ── 5. SEND EMAILS ────────────────────────────────────────────────────
+        else if (choice == 5)
         {
             std::string code;
             std::cout << "Code du crew : ";
@@ -224,8 +260,8 @@ int main()
             recvJson(sock, resp);
             printServerResponse(resp);
         }
-        // ── 5. GET WISHES ─────────────────────────────────────────────────────
-        else if (choice == 5)
+        // ── 6. GET WISHES ─────────────────────────────────────────────────────
+        else if (choice == 6)
         {
             if (!requireSession(sock)) continue;
 
@@ -240,8 +276,8 @@ int main()
             recvJson(sock, resp);
             printServerResponse(resp);
         }
-        // ── 6. ADD WISH ───────────────────────────────────────────────────────
-        else if (choice == 6)
+        // ── 7. ADD WISH ───────────────────────────────────────────────────────
+        else if (choice == 7)
         {
             if (!requireSession(sock)) continue;
 
@@ -261,8 +297,8 @@ int main()
             recvJson(sock, resp);
             printServerResponse(resp);
         }
-        // ── 7. REMOVE WISH ────────────────────────────────────────────────────
-        else if (choice == 7)
+        // ── 8. REMOVE WISH ────────────────────────────────────────────────────
+        else if (choice == 8)
         {
             if (!requireSession(sock)) continue;
 
@@ -302,8 +338,8 @@ int main()
             recvJson(sock, resp);
             printServerResponse(resp);
         }
-        // ── 8. QUIT ───────────────────────────────────────────────────────────
-        else if (choice == 8)
+        // ── 9. QUIT ───────────────────────────────────────────────────────────
+        else if (choice == 9)
         {
             running = false;
         }

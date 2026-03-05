@@ -19,7 +19,7 @@ using json = nlohmann::json;
 #include "Mailer.h"
 
 // =========================
-// Generation code invitation
+// G�n�ration code invitation
 // =========================
 
 static const char* INVITES_FILE = "ServerData/invites.json";
@@ -311,6 +311,42 @@ int main()
                 }
 
                 sendJson(client, R"({"status":"OK","message":"Emails envoyes"})");
+            }
+            else if (action == "LOGIN_CREW")
+            {
+                // Required: invite_code, name
+                // Finds the participant by name and returns their token
+                if (!request.contains("invite_code") || !request.contains("name"))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"invite_code et name requis"})");
+                    continue;
+                }
+
+                std::string inviteCode = request["invite_code"].get<std::string>();
+                auto it = invites.find(inviteCode);
+                if (it == invites.end())
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Code invalide"})");
+                    continue;
+                }
+
+                std::string name = request["name"].get<std::string>();
+
+                Crew crew;
+                Save::loadCrew(crew, it->second);
+
+                const Users* user = crew.findUserByName(name);
+                if (!user)
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Nom introuvable dans ce crew"})");
+                    continue;
+                }
+
+                json resp;
+                resp["status"] = "OK";
+                resp["token"] = user->getToken();
+                resp["participants_count"] = crew.getUsers().size();
+                sendJson(client, resp.dump());
             }
             else if (action == "ADD_WISH")
             {
