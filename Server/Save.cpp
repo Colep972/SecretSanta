@@ -88,6 +88,7 @@ bool Save::saveCrew(const Crew& crew, const std::string& filename)
         json ju;
         ju["name"] = user.getName();
         ju["email"] = user.getEmail();
+        ju["token"] = user.getToken();
         ju["wishes"] = user.getWishes();
         j["users"].push_back(ju);
     }
@@ -116,6 +117,8 @@ bool Save::loadCrew(Crew& crew, const std::string& filename)
     for (const auto& ju : j["users"])
     {
         Users user(ju["name"], ju["email"]);
+        if (ju.contains("token"))
+            user.setToken(ju["token"].get<std::string>());
         for (const auto& wish : ju["wishes"])
             user.addWish(wish);
 
@@ -178,4 +181,3 @@ bool Save::loadDrawResult(
 //    std::ifstream file(filename);
 //    return file.good();
 //}
-

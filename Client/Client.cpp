@@ -1,4 +1,4 @@
-#include <limits>
+﻿#include <limits>
 #include <iostream>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -9,10 +9,18 @@
 
 using json = nlohmann::json;
 
+// ─── Session state ────────────────────────────────────────────────────────────
+// Stored after CREATE_CREW or JOIN_CREW so the user doesn't retype them each time
+static std::string g_inviteCode;
+static std::string g_token;
+static std::string g_name;
+// ─────────────────────────────────────────────────────────────────────────────
+
 void printServerResponse(const std::string& resp)
 {
-    json res = json::parse(resp);
-    std::cout << res.dump(4) << "\n";
+    json res;
+    try { res = json::parse(resp); }
+    catch (...) { std::cout << "[ERREUR] Reponse non-JSON : " << resp << "\n"; return; }
 
     if (!res.contains("status"))
     {
@@ -21,21 +29,49 @@ void printServerResponse(const std::string& resp)
     }
 
     std::string status = res["status"].get<std::string>();
+    std::cout << (status == "OK" ? "[OK]" : "[ERREUR]") << "\n";
 
-    if (status == "OK")
-        std::cout << "[OK]\n";
-    else
-        std::cout << "[ERREUR]\n";
-
-    // Message g�n�rique si pr�sent
     if (res.contains("message"))
-        std::cout << res["message"].get<std::string>() << "\n";
+        std::cout << "  " << res["message"].get<std::string>() << "\n";
 
     if (res.contains("invite_code"))
-        std::cout << "Invite code : " << res["invite_code"].get<std::string>() << "\n";
+        std::cout << "  Code crew      : " << res["invite_code"].get<std::string>() << "\n";
+
+    if (res.contains("token"))
+        std::cout << "  Votre token    : " << res["token"].get<std::string>()
+        << "  (conservez-le !)\n";
 
     if (res.contains("participants_count"))
-        std::cout << "Participants actuels : " << res["participants_count"] << "\n";
+        std::cout << "  Participants   : " << res["participants_count"] << "\n";
+
+    if (res.contains("name"))
+        std::cout << "  Profil de      : " << res["name"].get<std::string>() << "\n";
+
+    if (res.contains("wishes"))
+    {
+        auto& wishes = res["wishes"];
+        if (wishes.empty())
+        {
+            std::cout << "  Liste de voeux : (vide)\n";
+        }
+        else
+        {
+            std::cout << "  Liste de voeux :\n";
+            int idx = 0;
+            for (const auto& w : wishes)
+                std::cout << "    [" << idx++ << "] " << w.get<std::string>() << "\n";
+        }
+    }
+}
+
+// Helper: ensure the user has joined/created a crew this session
+static bool requireSession(SOCKET sock)
+{
+    if (!g_inviteCode.empty() && !g_token.empty())
+        return true;
+
+    std::cout << "  [!] Vous devez d'abord creer ou rejoindre un crew (options 1 ou 2).\n";
+    return false;
 }
 
 int main()
@@ -56,34 +92,46 @@ int main()
         return -1;
     }
 
-    std::cout << "Connectxion au serveur etablie !\n";
+    std::cout << "Connexion au serveur etablie !\n";
 
     bool running = true;
-
     while (running)
     {
-        std::cout << std::endl << "1. Creer un crew " << std::endl;
-        std::cout << "2. Rejoindre un crew " << std::endl;
-        std::cout << "3. Lancer le tirage " << std::endl;
-        std::cout << "4. Envoyer les emails " << std::endl;
-        std::cout << "5. Quitter " << std::endl;
-        std::cout << "Choix : ";
+        std::cout << "\n";
+
+        // Show session status if logged in
+        if (!g_inviteCode.empty())
+            std::cout << "  [Session : " << g_name << " | crew " << g_inviteCode << "]\n\n";
+
+        std::cout << "  1. Creer un crew\n";
+        std::cout << "  2. Rejoindre un crew\n";
+        std::cout << "  3. Lancer le tirage (admin)\n";
+        std::cout << "  4. Envoyer les emails (admin)\n";
+        std::cout << "  ─────────────────────────────\n";
+        std::cout << "  5. Voir ma liste de voeux\n";
+        std::cout << "  6. Ajouter un voeu\n";
+        std::cout << "  7. Supprimer un voeu\n";
+        std::cout << "  ─────────────────────────────\n";
+        std::cout << "  8. Quitter\n";
+        std::cout << "  Choix : ";
 
         int choice;
         std::cin >> choice;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
+        // ── 1. CREATE CREW ────────────────────────────────────────────────────
         if (choice == 1)
         {
             std::string crewName, name, email;
 
             std::cout << "Nom du crew : ";
-            std::getline(std::cin >> std::ws, crewName);
+            std::getline(std::cin, crewName);
 
-            std::cout << "Ton nom : ";
-            std::getline(std::cin >> std::ws, name);
+            std::cout << "Ton nom     : ";
+            std::getline(std::cin, name);
 
-            std::cout << "Ton email : ";
-            std::getline(std::cin >> std::ws, email);
+            std::cout << "Ton email   : ";
+            std::getline(std::cin, email);
 
             json req;
             req["action"] = "CREATE_CREW";
@@ -96,17 +144,29 @@ int main()
             std::string resp;
             recvJson(sock, resp);
             printServerResponse(resp);
+
+            // Save session
+            json res = json::parse(resp);
+            if (res["status"] == "OK")
+            {
+                g_inviteCode = res["invite_code"].get<std::string>();
+                g_token = res["token"].get<std::string>();
+                g_name = name;
+            }
         }
+        // ── 2. JOIN CREW ──────────────────────────────────────────────────────
         else if (choice == 2)
         {
             std::string code, name, email;
 
-            std::cout << "Code : ";
-            std::cin >> code;
-            std::cout << "Nom : ";
-            std::cin >> name;
-            std::cout << "Email : ";
-            std::cin >> email;
+            std::cout << "Code du crew : ";
+            std::getline(std::cin, code);
+
+            std::cout << "Ton nom      : ";
+            std::getline(std::cin, name);
+
+            std::cout << "Ton email    : ";
+            std::getline(std::cin, email);
 
             json req;
             req["action"] = "JOIN_CREW";
@@ -115,15 +175,26 @@ int main()
             req["user"]["email"] = email;
 
             sendJson(sock, req.dump());
+
             std::string resp;
             recvJson(sock, resp);
             printServerResponse(resp);
+
+            // Save session
+            json res = json::parse(resp);
+            if (res["status"] == "OK")
+            {
+                g_inviteCode = code;
+                g_token = res["token"].get<std::string>();
+                g_name = name;
+            }
         }
+        // ── 3. RUN DRAW ───────────────────────────────────────────────────────
         else if (choice == 3)
         {
             std::string code;
             std::cout << "Code du crew : ";
-            std::cin >> code;
+            std::getline(std::cin, code);
 
             json req;
             req["action"] = "RUN_DRAW";
@@ -136,11 +207,12 @@ int main()
             recvJson(sock, resp);
             printServerResponse(resp);
         }
+        // ── 4. SEND EMAILS ────────────────────────────────────────────────────
         else if (choice == 4)
         {
             std::string code;
             std::cout << "Code du crew : ";
-            std::cin >> code;
+            std::getline(std::cin, code);
 
             json req;
             req["action"] = "SEND_EMAILS";
@@ -152,7 +224,86 @@ int main()
             recvJson(sock, resp);
             printServerResponse(resp);
         }
+        // ── 5. GET WISHES ─────────────────────────────────────────────────────
         else if (choice == 5)
+        {
+            if (!requireSession(sock)) continue;
+
+            json req;
+            req["action"] = "GET_WISHES";
+            req["invite_code"] = g_inviteCode;
+            req["token"] = g_token;
+
+            sendJson(sock, req.dump());
+
+            std::string resp;
+            recvJson(sock, resp);
+            printServerResponse(resp);
+        }
+        // ── 6. ADD WISH ───────────────────────────────────────────────────────
+        else if (choice == 6)
+        {
+            if (!requireSession(sock)) continue;
+
+            std::string wish;
+            std::cout << "Votre voeu : ";
+            std::getline(std::cin, wish);
+
+            json req;
+            req["action"] = "ADD_WISH";
+            req["invite_code"] = g_inviteCode;
+            req["token"] = g_token;
+            req["wish"] = wish;
+
+            sendJson(sock, req.dump());
+
+            std::string resp;
+            recvJson(sock, resp);
+            printServerResponse(resp);
+        }
+        // ── 7. REMOVE WISH ────────────────────────────────────────────────────
+        else if (choice == 7)
+        {
+            if (!requireSession(sock)) continue;
+
+            // First show current wishes so user knows the indices
+            {
+                json req;
+                req["action"] = "GET_WISHES";
+                req["invite_code"] = g_inviteCode;
+                req["token"] = g_token;
+                sendJson(sock, req.dump());
+                std::string resp;
+                recvJson(sock, resp);
+                printServerResponse(resp);
+
+                json res = json::parse(resp);
+                if (!res.contains("wishes") || res["wishes"].empty())
+                {
+                    std::cout << "  Aucun voeu a supprimer.\n";
+                    continue;
+                }
+            }
+
+            int index;
+            std::cout << "Index a supprimer : ";
+            std::cin >> index;
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+            json req;
+            req["action"] = "REMOVE_WISH";
+            req["invite_code"] = g_inviteCode;
+            req["token"] = g_token;
+            req["index"] = index;
+
+            sendJson(sock, req.dump());
+
+            std::string resp;
+            recvJson(sock, resp);
+            printServerResponse(resp);
+        }
+        // ── 8. QUIT ───────────────────────────────────────────────────────────
+        else if (choice == 8)
         {
             running = false;
         }
