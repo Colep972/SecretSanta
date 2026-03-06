@@ -9,6 +9,19 @@ void Crew::addUser(const Users& user)
     m_users.push_back(user);
 }
 
+bool Crew::removeUser(const std::string& name)
+{
+    for (auto it = m_users.begin(); it != m_users.end(); ++it)
+    {
+        if (it->getName() == name)
+        {
+            m_users.erase(it);
+            return true;
+        }
+    }
+    return false;
+}
+
 const std::vector<Users>& Crew::getUsers() const { return m_users; }
 std::vector<Users>& Crew::getUsers() { return m_users; }
 const std::string& Crew::getName() const { return m_name; }
@@ -29,4 +42,17 @@ const Users* Crew::findUserByName(const std::string& name) const
         if (u.getName() == name)
             return &u;
     return nullptr;
+}
+
+bool Crew::removeParticipant(const std::string& name)
+{
+    for (auto it = m_users.begin(); it != m_users.end(); ++it)
+    {
+        if (it->getName() == name)
+        {
+            m_users.erase(it);
+            return true;
+        }
+    }
+    return false;
 }

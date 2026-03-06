@@ -469,6 +469,91 @@ int main()
                 resp["wishes"] = user->getWishes();
                 sendJson(client, resp.dump());
             }
+            else if (action == "REMOVE_PARTICIPANT")
+            {
+                // Admin only: invite_code, admin_token, name
+                if (!request.contains("admin_token") ||
+                    request["admin_token"].get<std::string>() != ADMIN_TOKEN)
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Non autorise"})");
+                    continue;
+                }
+
+                if (!request.contains("invite_code") || !request.contains("name"))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"invite_code et name requis"})");
+                    continue;
+                }
+
+                std::string inviteCode = request["invite_code"].get<std::string>();
+                auto it = invites.find(inviteCode);
+                if (it == invites.end())
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Code invalide"})");
+                    continue;
+                }
+
+                std::string name = request["name"].get<std::string>();
+
+                Crew crew;
+                Save::loadCrew(crew, it->second);
+
+                // Cannot remove the owner
+                const Users* target = crew.findUserByName(name);
+                if (!target)
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Participant introuvable"})");
+                    continue;
+                }
+                if (target->getToken() == crew.getOwnerToken())
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Impossible de retirer le createur du crew"})");
+                    continue;
+                }
+
+                crew.removeUser(name);
+                Save::saveCrew(crew, it->second);
+
+                // Invalidate draw if it existed
+                Save::clearDrawResult(it->second);
+
+                json resp;
+                resp["status"] = "OK";
+                resp["participants_count"] = crew.getUsers().size();
+                sendJson(client, resp.dump());
+            }
+            else if (action == "RESET_DRAW")
+            {
+                // Admin only: invite_code, admin_token
+                if (!request.contains("admin_token") ||
+                    request["admin_token"].get<std::string>() != ADMIN_TOKEN)
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Non autorise"})");
+                    continue;
+                }
+
+                if (!request.contains("invite_code"))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"invite_code requis"})");
+                    continue;
+                }
+
+                std::string inviteCode = request["invite_code"].get<std::string>();
+                auto it = invites.find(inviteCode);
+                if (it == invites.end())
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Code invalide"})");
+                    continue;
+                }
+
+                if (!Save::clearDrawResult(it->second))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Aucun tirage a reinitialiser"})");
+                    continue;
+                }
+
+                sendJson(client, R"({"status":"OK","message":"Tirage reinitialise"})");
+            }
             else if (action == "GET_CREW_STATUS")
             {
                 // Required: invite_code
@@ -499,6 +584,80 @@ int main()
                 resp["draw_done"] = drawDone;
                 sendJson(client, resp.dump());
             }
+            else if (action == "REMOVE_PARTICIPANT")
+            {
+                // Required: invite_code, admin_token, name
+                if (!request.contains("admin_token") ||
+                    request["admin_token"].get<std::string>() != ADMIN_TOKEN)
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Non autorise"})");
+                    continue;
+                }
+
+                if (!request.contains("invite_code") || !request.contains("name"))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"invite_code et name requis"})");
+                    continue;
+                }
+
+                std::string inviteCode = request["invite_code"].get<std::string>();
+                auto it = invites.find(inviteCode);
+                if (it == invites.end())
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Code invalide"})");
+                    continue;
+                }
+
+                std::string name = request["name"].get<std::string>();
+
+                Crew crew;
+                Save::loadCrew(crew, it->second);
+
+                if (!crew.removeParticipant(name))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Participant introuvable"})");
+                    continue;
+                }
+
+                Save::saveCrew(crew, it->second);
+
+                json resp;
+                resp["status"] = "OK";
+                resp["participants_count"] = crew.getUsers().size();
+                sendJson(client, resp.dump());
+            }
+            else if (action == "RESET_DRAW")
+            {
+                // Required: invite_code, admin_token
+                if (!request.contains("admin_token") ||
+                    request["admin_token"].get<std::string>() != ADMIN_TOKEN)
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Non autorise"})");
+                    continue;
+                }
+
+                if (!request.contains("invite_code"))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"invite_code requis"})");
+                    continue;
+                }
+
+                std::string inviteCode = request["invite_code"].get<std::string>();
+                auto it = invites.find(inviteCode);
+                if (it == invites.end())
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Code invalide"})");
+                    continue;
+                }
+
+                if (!Save::clearDrawResult(it->second))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Erreur reinitialisation tirage"})");
+                    continue;
+                }
+
+                sendJson(client, R"({"status":"OK","message":"Tirage reinitialise"})");
+            }
             else
             {
                 sendJson(client, R"({"status":"ERROR","message":"Action inconnue"})");
@@ -506,7 +665,7 @@ int main()
 
         }
         close(client);
-        std::cout << "Client d�connect�\n";
+        std::cout << "Client déconnecté\n";
     }
 
     close(listening);

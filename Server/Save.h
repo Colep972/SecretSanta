@@ -23,6 +23,7 @@ public:
     static bool loadDrawResult(
         const std::string& crewFile,
         std::map<std::string, std::string>& results);
+    static bool clearDrawResult(const std::string& crewFile);
 
 
 

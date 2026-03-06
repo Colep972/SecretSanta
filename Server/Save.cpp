@@ -178,9 +178,25 @@ bool Save::loadDrawResult(
     return true;
 }
 
+bool Save::clearDrawResult(const std::string& crewFile)
+{
+    std::ifstream in(crewFile);
+    if (!in.is_open())
+        return false;
 
+    json j;
+    in >> j;
+    in.close();
 
-//bool Save::profileExists(const std::string& filename)
+    j.erase("draw");
+
+    std::ofstream out(crewFile);
+    if (!out.is_open())
+        return false;
+
+    out << j.dump(4);
+    return true;
+}
 //{
 //    std::ifstream file(filename);
 //    return file.good();

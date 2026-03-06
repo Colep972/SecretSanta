@@ -138,6 +138,9 @@ int main()
                 std::cout << "  4. Lancer le tirage (admin)\n";
             if (m_drawDone)
                 std::cout << "  5. Envoyer les emails (admin)\n";
+            std::cout << "  10. Retirer un participant (admin)\n";
+            if (m_drawDone)
+                std::cout << "  11. Reinitialiser le tirage (admin)\n";
         }
 
         if (!m_inviteCode.empty())
@@ -389,6 +392,56 @@ int main()
             std::string resp;
             recvJson(sock, resp);
             printServerResponse(resp);
+        }
+        // ── 10. REMOVE PARTICIPANT (admin only) ───────────────────────────────
+        else if (choice == 10)
+        {
+            if (!m_isAdmin) { std::cout << "  [!] Acces refuse.\n"; continue; }
+            if (!requireSession()) continue;
+
+            std::string name;
+            std::cout << "Nom du participant a retirer : ";
+            std::getline(std::cin, name);
+
+            json req;
+            req["action"] = "REMOVE_PARTICIPANT";
+            req["invite_code"] = m_inviteCode;
+            req["admin_token"] = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
+            req["name"] = name;
+
+            sendJson(sock, req.dump());
+
+            std::string resp;
+            recvJson(sock, resp);
+            printServerResponse(resp);
+
+            json res = json::parse(resp);
+            if (res["status"] == "OK")
+            {
+                m_drawDone = false; // draw invalidated by removal
+                refreshCrewStatus(sock);
+            }
+        }
+        // ── 11. RESET DRAW (admin only) ───────────────────────────────────────
+        else if (choice == 11)
+        {
+            if (!m_isAdmin) { std::cout << "  [!] Acces refuse.\n"; continue; }
+            if (!requireSession()) continue;
+
+            json req;
+            req["action"] = "RESET_DRAW";
+            req["invite_code"] = m_inviteCode;
+            req["admin_token"] = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
+
+            sendJson(sock, req.dump());
+
+            std::string resp;
+            recvJson(sock, resp);
+            printServerResponse(resp);
+
+            json res = json::parse(resp);
+            if (res["status"] == "OK")
+                refreshCrewStatus(sock);
         }
         // ── 9. QUIT ───────────────────────────────────────────────────────────
         else if (choice == 9)
