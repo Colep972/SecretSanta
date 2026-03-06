@@ -73,6 +73,15 @@ void printServerResponse(const std::string& resp)
     if (res.contains("name"))
         std::cout << "  Profil de    : " << res["name"].get<std::string>() << "\n";
 
+    if (res.contains("participants"))
+    {
+        auto& parts = res["participants"];
+        std::cout << "  Participants :\n";
+        int idx = 1;
+        for (const auto& p : parts)
+            std::cout << "    " << idx++ << ". " << p.get<std::string>() << "\n";
+    }
+
     if (res.contains("wishes"))
     {
         auto& wishes = res["wishes"];
@@ -398,6 +407,24 @@ int main()
         {
             if (!m_isAdmin) { std::cout << "  [!] Acces refuse.\n"; continue; }
             if (!requireSession()) continue;
+
+            // Fetch and display participant list first
+            {
+                json req;
+                req["action"] = "GET_PARTICIPANTS";
+                req["invite_code"] = m_inviteCode;
+                sendJson(sock, req.dump());
+                std::string resp;
+                recvJson(sock, resp);
+                printServerResponse(resp);
+
+                json res = json::parse(resp);
+                if (!res.contains("participants") || res["participants"].empty())
+                {
+                    std::cout << "  Aucun participant.\n";
+                    continue;
+                }
+            }
 
             std::string name;
             std::cout << "Nom du participant a retirer : ";

@@ -11,6 +11,7 @@ public:
     Crew(const std::string& name);
     void addUser(const Users& user);
     bool removeUser(const std::string& name); // returns false if not found
+    bool removeUser(const std::string& name); // returns false if not found
     const std::vector<Users>& getUsers() const;
     std::vector<Users>& getUsers();
     const std::string& getName() const;
