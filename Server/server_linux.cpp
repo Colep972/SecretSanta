@@ -18,18 +18,14 @@ using json = nlohmann::json;
 #include "Draw.h"
 #include "Mailer.h"
 
-// =========================
-// G�n�ration code invitation
-// =========================
-
 static const char* INVITES_FILE = "ServerData/invites.json";
+const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
 
 static void saveInvites(const std::unordered_map<std::string, std::string>& invites)
 {
     json j = json::object();
     for (const auto& kv : invites)
         j[kv.first] = kv.second;
-
     std::ofstream out(INVITES_FILE);
     out << j.dump(4);
 }
@@ -37,26 +33,18 @@ static void saveInvites(const std::unordered_map<std::string, std::string>& invi
 static void loadInvites(std::unordered_map<std::string, std::string>& invites)
 {
     invites.clear();
-
     std::ifstream in(INVITES_FILE);
     if (!in.is_open())
         return;
-
     try
     {
         json j;
         in >> j;
-
         for (auto it = j.begin(); it != j.end(); ++it)
             invites[it.key()] = it.value().get<std::string>();
     }
-    catch (...)
-    {
-        invites.clear(); // fichier corrompu => on repart vide
-    }
+    catch (...) { invites.clear(); }
 }
-
-const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
 
 static std::string generateInviteCode()
 {
@@ -78,7 +66,6 @@ static std::string generateToken()
 
 int main()
 {
-    // Petite seed pour generateInviteCode()
     srand((unsigned)time(nullptr));
 
     int listening = socket(AF_INET, SOCK_STREAM, 0);
@@ -109,9 +96,8 @@ int main()
         return 1;
     }
 
-    std::cout << "Serveur pr�t (Raspberry Pi) sur le port 54000\n";
+    std::cout << "Serveur pret (Raspberry Pi) sur le port 54000\n";
 
-    // invite_code -> chemin du crew
     std::unordered_map<std::string, std::string> invites;
     loadInvites(invites);
     std::cout << "Invites charges: " << invites.size() << "\n";
@@ -122,18 +108,15 @@ int main()
         if (client < 0)
             continue;
 
-        std::cout << "Client connect�\n";
+        std::cout << "Client connecte\n";
 
         std::string msg;
         while (recvJson(client, msg))
         {
-            std::cout << "Re�u: " << msg << "\n";
+            std::cout << "Recu: " << msg << "\n";
 
             json request;
-            try
-            {
-                request = json::parse(msg);
-            }
+            try { request = json::parse(msg); }
             catch (...)
             {
                 sendJson(client, R"({"status":"ERROR","message":"JSON invalide"})");
@@ -148,10 +131,12 @@ int main()
 
             std::string action = request["action"].get<std::string>();
 
+            // ----------------------------------------------------------------
             if (action == "PING")
             {
                 sendJson(client, R"({"status":"OK","reply":"PONG"})");
             }
+            // ----------------------------------------------------------------
             else if (action == "CREATE_CREW")
             {
                 if (!request.contains("crew_name"))
@@ -178,8 +163,6 @@ int main()
                         Users creator(u["name"].get<std::string>(), u["email"].get<std::string>());
                         creator.setToken(generateToken());
                         crew.addUser(creator);
-
-                        // First user is the owner
                         crew.setOwnerToken(creator.getToken());
                         resp["is_owner"] = true;
                         resp["token"] = creator.getToken();
@@ -187,14 +170,13 @@ int main()
                 }
 
                 Save::saveCrew(crew, crewFile);
-
                 invites[inviteCode] = crewFile;
                 saveInvites(invites);
 
                 resp["participants_count"] = crew.getUsers().size();
-
                 sendJson(client, resp.dump());
             }
+            // ----------------------------------------------------------------
             else if (action == "JOIN_CREW")
             {
                 if (!request.contains("invite_code") || !request.contains("user"))
@@ -233,6 +215,41 @@ int main()
                 resp["participants_count"] = crew.getUsers().size();
                 sendJson(client, resp.dump());
             }
+            // ----------------------------------------------------------------
+            else if (action == "LOGIN_CREW")
+            {
+                if (!request.contains("invite_code") || !request.contains("name"))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"invite_code et name requis"})");
+                    continue;
+                }
+
+                std::string inviteCode = request["invite_code"].get<std::string>();
+                auto it = invites.find(inviteCode);
+                if (it == invites.end())
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Code invalide"})");
+                    continue;
+                }
+
+                Crew crew;
+                Save::loadCrew(crew, it->second);
+
+                const Users* user = crew.findUserByName(request["name"].get<std::string>());
+                if (!user)
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Nom introuvable dans ce crew"})");
+                    continue;
+                }
+
+                json resp;
+                resp["status"] = "OK";
+                resp["token"] = user->getToken();
+                resp["is_owner"] = (user->getToken() == crew.getOwnerToken());
+                resp["participants_count"] = crew.getUsers().size();
+                sendJson(client, resp.dump());
+            }
+            // ----------------------------------------------------------------
             else if (action == "RUN_DRAW")
             {
                 if (!request.contains("admin_token") ||
@@ -280,6 +297,7 @@ int main()
 
                 sendJson(client, R"({"status":"OK","message":"Tirage effectue"})");
             }
+            // ----------------------------------------------------------------
             else if (action == "SEND_EMAILS")
             {
                 if (!request.contains("invite_code"))
@@ -315,46 +333,9 @@ int main()
 
                 sendJson(client, R"({"status":"OK","message":"Emails envoyes"})");
             }
-            else if (action == "LOGIN_CREW")
-            {
-                // Required: invite_code, name
-                // Finds the participant by name and returns their token
-                if (!request.contains("invite_code") || !request.contains("name"))
-                {
-                    sendJson(client, R"({"status":"ERROR","message":"invite_code et name requis"})");
-                    continue;
-                }
-
-                std::string inviteCode = request["invite_code"].get<std::string>();
-                auto it = invites.find(inviteCode);
-                if (it == invites.end())
-                {
-                    sendJson(client, R"({"status":"ERROR","message":"Code invalide"})");
-                    continue;
-                }
-
-                std::string name = request["name"].get<std::string>();
-
-                Crew crew;
-                Save::loadCrew(crew, it->second);
-
-                const Users* user = crew.findUserByName(name);
-                if (!user)
-                {
-                    sendJson(client, R"({"status":"ERROR","message":"Nom introuvable dans ce crew"})");
-                    continue;
-                }
-
-                json resp;
-                resp["status"] = "OK";
-                resp["token"] = user->getToken();
-                resp["is_owner"] = (user->getToken() == crew.getOwnerToken());
-                resp["participants_count"] = crew.getUsers().size();
-                sendJson(client, resp.dump());
-            }
+            // ----------------------------------------------------------------
             else if (action == "ADD_WISH")
             {
-                // Required: invite_code, token, wish
                 if (!request.contains("invite_code") || !request.contains("token") || !request.contains("wish"))
                 {
                     sendJson(client, R"({"status":"ERROR","message":"invite_code, token et wish requis"})");
@@ -369,20 +350,17 @@ int main()
                     continue;
                 }
 
-                std::string token = request["token"].get<std::string>();
-                std::string wish = request["wish"].get<std::string>();
-
                 Crew crew;
                 Save::loadCrew(crew, it->second);
 
-                Users* user = crew.findUserByToken(token);
+                Users* user = crew.findUserByToken(request["token"].get<std::string>());
                 if (!user)
                 {
                     sendJson(client, R"({"status":"ERROR","message":"Token invalide"})");
                     continue;
                 }
 
-                user->addWish(wish);
+                user->addWish(request["wish"].get<std::string>());
                 Save::saveCrew(crew, it->second);
 
                 json resp;
@@ -390,9 +368,9 @@ int main()
                 resp["wishes"] = user->getWishes();
                 sendJson(client, resp.dump());
             }
+            // ----------------------------------------------------------------
             else if (action == "REMOVE_WISH")
             {
-                // Required: invite_code, token, index (0-based)
                 if (!request.contains("invite_code") || !request.contains("token") || !request.contains("index"))
                 {
                     sendJson(client, R"({"status":"ERROR","message":"invite_code, token et index requis"})");
@@ -407,20 +385,17 @@ int main()
                     continue;
                 }
 
-                std::string token = request["token"].get<std::string>();
-                int index = request["index"].get<int>();
-
                 Crew crew;
                 Save::loadCrew(crew, it->second);
 
-                Users* user = crew.findUserByToken(token);
+                Users* user = crew.findUserByToken(request["token"].get<std::string>());
                 if (!user)
                 {
                     sendJson(client, R"({"status":"ERROR","message":"Token invalide"})");
                     continue;
                 }
 
-                if (!user->removeWish(index))
+                if (!user->removeWish(request["index"].get<int>()))
                 {
                     sendJson(client, R"({"status":"ERROR","message":"Index invalide"})");
                     continue;
@@ -433,10 +408,9 @@ int main()
                 resp["wishes"] = user->getWishes();
                 sendJson(client, resp.dump());
             }
+            // ----------------------------------------------------------------
             else if (action == "GET_WISHES")
             {
-                // Required: invite_code, token
-                // Returns the caller's own wish list
                 if (!request.contains("invite_code") || !request.contains("token"))
                 {
                     sendJson(client, R"({"status":"ERROR","message":"invite_code et token requis"})");
@@ -451,12 +425,10 @@ int main()
                     continue;
                 }
 
-                std::string token = request["token"].get<std::string>();
-
                 Crew crew;
                 Save::loadCrew(crew, it->second);
 
-                const Users* user = crew.findUserByToken(token);
+                const Users* user = crew.findUserByToken(request["token"].get<std::string>());
                 if (!user)
                 {
                     sendJson(client, R"({"status":"ERROR","message":"Token invalide"})");
@@ -469,69 +441,9 @@ int main()
                 resp["wishes"] = user->getWishes();
                 sendJson(client, resp.dump());
             }
-            else if (action == "REMOVE_PARTICIPANT")
+            // ----------------------------------------------------------------
+            else if (action == "GET_PARTICIPANTS")
             {
-                // Admin only: invite_code, admin_token, name
-                if (!request.contains("admin_token") ||
-                    request["admin_token"].get<std::string>() != ADMIN_TOKEN)
-                {
-                    sendJson(client, R"({"status":"ERROR","message":"Non autorise"})");
-                    continue;
-                }
-
-                if (!request.contains("invite_code") || !request.contains("name"))
-                {
-                    sendJson(client, R"({"status":"ERROR","message":"invite_code et name requis"})");
-                    continue;
-                }
-
-                std::string inviteCode = request["invite_code"].get<std::string>();
-                auto it = invites.find(inviteCode);
-                if (it == invites.end())
-                {
-                    sendJson(client, R"({"status":"ERROR","message":"Code invalide"})");
-                    continue;
-                }
-
-                std::string name = request["name"].get<std::string>();
-
-                Crew crew;
-                Save::loadCrew(crew, it->second);
-
-                // Cannot remove the owner
-                const Users* target = crew.findUserByName(name);
-                if (!target)
-                {
-                    sendJson(client, R"({"status":"ERROR","message":"Participant introuvable"})");
-                    continue;
-                }
-                if (target->getToken() == crew.getOwnerToken())
-                {
-                    sendJson(client, R"({"status":"ERROR","message":"Impossible de retirer le createur du crew"})");
-                    continue;
-                }
-
-                crew.removeUser(name);
-                Save::saveCrew(crew, it->second);
-
-                // Invalidate draw if it existed
-                Save::clearDrawResult(it->second);
-
-                json resp;
-                resp["status"] = "OK";
-                resp["participants_count"] = crew.getUsers().size();
-                sendJson(client, resp.dump());
-            }
-            else if (action == "RESET_DRAW")
-            {
-                // Admin only: invite_code, admin_token
-                if (!request.contains("admin_token") ||
-                    request["admin_token"].get<std::string>() != ADMIN_TOKEN)
-                {
-                    sendJson(client, R"({"status":"ERROR","message":"Non autorise"})");
-                    continue;
-                }
-
                 if (!request.contains("invite_code"))
                 {
                     sendJson(client, R"({"status":"ERROR","message":"invite_code requis"})");
@@ -546,18 +458,21 @@ int main()
                     continue;
                 }
 
-                if (!Save::clearDrawResult(it->second))
-                {
-                    sendJson(client, R"({"status":"ERROR","message":"Aucun tirage a reinitialiser"})");
-                    continue;
-                }
+                Crew crew;
+                Save::loadCrew(crew, it->second);
 
-                sendJson(client, R"({"status":"OK","message":"Tirage reinitialise"})");
+                json names = json::array();
+                for (const auto& u : crew.getUsers())
+                    names.push_back(u.getName());
+
+                json resp;
+                resp["status"] = "OK";
+                resp["participants"] = names;
+                sendJson(client, resp.dump());
             }
+            // ----------------------------------------------------------------
             else if (action == "GET_CREW_STATUS")
             {
-                // Required: invite_code
-                // Returns participant count and whether draw has been done
                 if (!request.contains("invite_code"))
                 {
                     sendJson(client, R"({"status":"ERROR","message":"invite_code requis"})");
@@ -584,9 +499,9 @@ int main()
                 resp["draw_done"] = drawDone;
                 sendJson(client, resp.dump());
             }
+            // ----------------------------------------------------------------
             else if (action == "REMOVE_PARTICIPANT")
             {
-                // Required: invite_code, admin_token, name
                 if (!request.contains("admin_token") ||
                     request["admin_token"].get<std::string>() != ADMIN_TOKEN)
                 {
@@ -608,27 +523,44 @@ int main()
                     continue;
                 }
 
+                // Block if draw already done
+                std::map<std::string, std::string> existingDraw;
+                if (Save::loadDrawResult(it->second, existingDraw))
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Tirage deja effectue. Reinitialiser d'abord."})");
+                    continue;
+                }
+
                 std::string name = request["name"].get<std::string>();
 
                 Crew crew;
                 Save::loadCrew(crew, it->second);
 
-                if (!crew.removeParticipant(name))
+                const Users* target = crew.findUserByName(name);
+                if (!target)
                 {
                     sendJson(client, R"({"status":"ERROR","message":"Participant introuvable"})");
                     continue;
                 }
 
+                if (target->getToken() == crew.getOwnerToken())
+                {
+                    sendJson(client, R"({"status":"ERROR","message":"Impossible de retirer le createur du crew"})");
+                    continue;
+                }
+
+                crew.removeUser(name);
                 Save::saveCrew(crew, it->second);
 
                 json resp;
                 resp["status"] = "OK";
+                resp["message"] = name + " retire du crew.";
                 resp["participants_count"] = crew.getUsers().size();
                 sendJson(client, resp.dump());
             }
+            // ----------------------------------------------------------------
             else if (action == "RESET_DRAW")
             {
-                // Required: invite_code, admin_token
                 if (!request.contains("admin_token") ||
                     request["admin_token"].get<std::string>() != ADMIN_TOKEN)
                 {
@@ -656,16 +588,17 @@ int main()
                     continue;
                 }
 
-                sendJson(client, R"({"status":"OK","message":"Tirage reinitialise"})");
+                sendJson(client, R"({"status":"OK","message":"Tirage reinitialise."})");
             }
+            // ----------------------------------------------------------------
             else
             {
                 sendJson(client, R"({"status":"ERROR","message":"Action inconnue"})");
             }
-
         }
+
         close(client);
-        std::cout << "Client déconnecté\n";
+        std::cout << "Client deconnecte\n";
     }
 
     close(listening);

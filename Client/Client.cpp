@@ -455,6 +455,16 @@ int main()
             if (!m_isAdmin) { std::cout << "  [!] Acces refuse.\n"; continue; }
             if (!requireSession()) continue;
 
+            std::cout << "  /!\\ ATTENTION : Les emails ont peut-etre deja ete envoyes.\n";
+            std::cout << "  Confirmer la reinitialisation du tirage ? (o/n) : ";
+            std::string confirm;
+            std::getline(std::cin, confirm);
+            if (confirm != "o" && confirm != "O")
+            {
+                std::cout << "  Annule.\n";
+                continue;
+            }
+
             json req;
             req["action"] = "RESET_DRAW";
             req["invite_code"] = m_inviteCode;
