@@ -121,7 +121,7 @@ static json handleRequest(const json& req)
         std::string name = req["name"].get<std::string>();
         Crew crew("");
         if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
-        Users* user = crew.findUserByName(name);
+        const Users* user = crew.findUserByName(name);
         if (!user) return err("User not found");
         bool isOwner = (user->getToken() == crew.getOwnerToken());
         return ok({ {"token",user->getToken()},{"is_owner",isOwner} });
@@ -159,8 +159,10 @@ static json handleRequest(const json& req)
         Crew crew("");
         if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
         if (crew.getUsers().size() < 3) return err("At least 3 participants required");
-        auto results = Draw::run(crew);
-        Save::saveDrawResult(crewFile(code), results);
+        Draw draw;
+        if (!draw.run(crew))
+            return err("Draw failed");
+        Save::saveDrawResult(crewFile(code), draw.getResults());
         return ok({ {"message","Draw done"} });
     }
 
@@ -175,7 +177,8 @@ static json handleRequest(const json& req)
         if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
         std::map<std::string, std::string> draw;
         if (!Save::loadDrawResult(crewFile(code), draw)) return err("Draw not done yet");
-        Mailer::send(crew, draw);
+        Mailer mailer;
+        mailer.send(crew, draw);
         return ok({ {"message","Emails sent"} });
     }
 
@@ -237,7 +240,7 @@ static json handleRequest(const json& req)
         if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
         std::map<std::string, std::string> draw;
         if (Save::loadDrawResult(crewFile(code), draw)) return err("Draw already done. Reset it first.");
-        Users* target = crew.findUserByName(name);
+        const Users* target = crew.findUserByName(name);
         if (!target) return err("User not found");
         if (target->getToken() == crew.getOwnerToken()) return err("Cannot remove the crew owner");
         crew.removeUser(name);
