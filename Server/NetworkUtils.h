@@ -1,14 +1,7 @@
 #pragma once
 #include <string>
+#include <nlohmann/json.hpp>
 
-#ifdef _WIN32
-#include <winsock2.h>
-using SocketType = SOCKET;
-#else
-#include <sys/socket.h>
-#include <unistd.h>
-using SocketType = int;
-#endif
-
-bool sendJson(SocketType sock, const std::string& json);
-bool recvJson(SocketType sock, std::string& json);
+// Sends a JSON request to the SecretSanta HTTPS API and returns the parsed response.
+// Throws std::runtime_error on connection failure.
+nlohmann::json sendRequest(const nlohmann::json& request);
