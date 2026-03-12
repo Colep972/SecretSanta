@@ -13,9 +13,7 @@ bool Save::saveUser(const Users& user, const std::string& filename)
     j["wishes"] = user.getWishes();
 
     std::ofstream file(filename);
-    if (!file.is_open())
-        return false;
-
+    if (!file.is_open()) return false;
     file << j.dump(4);
     return true;
 }
@@ -23,20 +21,14 @@ bool Save::saveUser(const Users& user, const std::string& filename)
 bool Save::loadUser(Users& user, const std::string& filename)
 {
     std::ifstream file(filename);
-    if (!file.is_open())
-        return false;
+    if (!file.is_open()) return false;
 
-    json j;
-    file >> j;
-
+    json j; file >> j;
     user = Users(j["name"], j["email"]);
-
     if (j.contains("token"))
         user.setToken(j["token"].get<std::string>());
-
     for (const auto& wish : j["wishes"])
         user.addWish(wish);
-
     return true;
 }
 
@@ -53,14 +45,11 @@ bool Save::saveCrew(const Crew& crew, const std::string& filename)
         ju["name"] = user.getName();
         ju["email"] = user.getEmail();
         ju["token"] = user.getToken();
-        ju["wishes"] = user.getWishes();
         j["users"].push_back(ju);
     }
 
     std::ofstream file(filename);
-    if (!file.is_open())
-        return false;
-
+    if (!file.is_open()) return false;
     file << j.dump(4);
     return true;
 }
@@ -68,12 +57,9 @@ bool Save::saveCrew(const Crew& crew, const std::string& filename)
 bool Save::loadCrew(Crew& crew, const std::string& filename)
 {
     std::ifstream file(filename);
-    if (!file.is_open())
-        return false;
+    if (!file.is_open()) return false;
 
-    json j;
-    file >> j;
-
+    json j; file >> j;
     crew = Crew(j["name"]);
 
     if (j.contains("owner_token"))
@@ -84,70 +70,94 @@ bool Save::loadCrew(Crew& crew, const std::string& filename)
         Users user(ju["name"], ju["email"]);
         if (ju.contains("token"))
             user.setToken(ju["token"].get<std::string>());
-        for (const auto& wish : ju["wishes"])
-            user.addWish(wish);
         crew.addUser(user);
     }
     return true;
 }
 
-bool Save::saveDrawResult(
-    const std::string& crewFile,
+bool Save::saveDrawResult(const std::string& crewFile,
     const std::map<std::string, std::string>& results)
 {
     std::ifstream in(crewFile);
-    if (!in.is_open())
-        return false;
-
-    json j;
-    in >> j;
-    in.close();
-
+    if (!in.is_open()) return false;
+    json j; in >> j; in.close();
     j["draw"] = results;
-
     std::ofstream out(crewFile);
     out << j.dump(4);
     return true;
 }
 
-bool Save::loadDrawResult(
-    const std::string& crewFile,
+bool Save::loadDrawResult(const std::string& crewFile,
     std::map<std::string, std::string>& results)
 {
     results.clear();
-
     std::ifstream in(crewFile);
-    if (!in.is_open())
-        return false;
-
-    json j;
-    in >> j;
-
-    if (!j.contains("draw"))
-        return false;
-
+    if (!in.is_open()) return false;
+    json j; in >> j;
+    if (!j.contains("draw")) return false;
     for (auto it = j["draw"].begin(); it != j["draw"].end(); ++it)
         results[it.key()] = it.value().get<std::string>();
-
     return true;
 }
 
 bool Save::clearDrawResult(const std::string& crewFile)
 {
     std::ifstream in(crewFile);
-    if (!in.is_open())
-        return false;
-
-    json j;
-    in >> j;
-    in.close();
-
+    if (!in.is_open()) return false;
+    json j; in >> j; in.close();
     j.erase("draw");
-
     std::ofstream out(crewFile);
-    if (!out.is_open())
-        return false;
-
+    if (!out.is_open()) return false;
     out << j.dump(4);
+    return true;
+}
+
+bool Save::saveProfile(const Profile& profile, const std::string& filename)
+{
+    json j;
+    j["username"] = profile.getUsername();
+    j["password_hash"] = profile.getPasswordHash();
+    j["name"] = profile.getName();
+    j["email"] = profile.getEmail();
+    j["wishes"] = profile.getWishes();
+    j["crews"] = json::array();
+
+    for (const auto& c : profile.getCrews())
+    {
+        json jc;
+        jc["code"] = c.code;
+        jc["token"] = c.token;
+        j["crews"].push_back(jc);
+    }
+
+    std::ofstream file(filename);
+    if (!file.is_open()) return false;
+    file << j.dump(4);
+    return true;
+}
+
+bool Save::loadProfile(Profile& profile, const std::string& filename)
+{
+    std::ifstream file(filename);
+    if (!file.is_open()) return false;
+
+    json j; file >> j;
+
+    profile = Profile(
+        j["username"].get<std::string>(),
+        j["password_hash"].get<std::string>(),
+        j["name"].get<std::string>(),
+        j["email"].get<std::string>()
+    );
+
+    for (const auto& w : j["wishes"])
+        profile.addWish(w.get<std::string>());
+
+    for (const auto& jc : j["crews"])
+        profile.addCrew(
+            jc["code"].get<std::string>(),
+            jc["token"].get<std::string>()
+        );
+
     return true;
 }

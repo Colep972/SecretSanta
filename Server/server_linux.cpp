@@ -5,6 +5,7 @@
 #include "Save.h"
 #include "Draw.h"
 #include "Mailer.h"
+#include "Profile.h"
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <fstream>
@@ -12,13 +13,19 @@
 #include <random>
 #include <string>
 #include <map>
+#include <functional>
 
 using json = nlohmann::json;
 
 static const std::string DATA_DIR = "ServerData/";
 static const std::string CREWS_DIR = "ServerData/Crews/";
+static const std::string PROFILES_DIR = "ServerData/Profiles/";
 static const std::string INVITES_FILE = DATA_DIR + "invites.json";
 static const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 static std::string generateToken()
 {
@@ -40,10 +47,15 @@ static std::string generateInviteCode()
     return code;
 }
 
-static std::string crewFile(const std::string& code)
+static std::string hashPassword(const std::string& password)
 {
-    return CREWS_DIR + code + ".json";
+    // Simple hash using std::hash — good enough for this app
+    std::size_t h = std::hash<std::string>{}(password + "secretsanta_salt");
+    return std::to_string(h);
 }
+
+static std::string crewFile(const std::string& code) { return CREWS_DIR + code + ".json"; }
+static std::string profileFile(const std::string& u) { return PROFILES_DIR + u + ".json"; }
 
 static std::map<std::string, std::string> loadInvites()
 {
@@ -63,70 +75,220 @@ static void saveInvites(const std::map<std::string, std::string>& m)
     f << j.dump(4);
 }
 
+// Active profile sessions: token -> username
+static std::map<std::string, std::string> g_profileSessions;
+
+static Profile* getProfileByToken(const std::string& token, Profile& out)
+{
+    auto it = g_profileSessions.find(token);
+    if (it == g_profileSessions.end()) return nullptr;
+    if (!Save::loadProfile(out, profileFile(it->second))) return nullptr;
+    return &out;
+}
+
 static json ok(json body = {}) { body["status"] = "OK";    return body; }
 static json err(const std::string& msg) { return json{ {"status","ERROR"},{"message",msg} }; }
+
+// ---------------------------------------------------------------------------
+// Request handler
+// ---------------------------------------------------------------------------
 
 static json handleRequest(const json& req)
 {
     if (!req.contains("action")) return err("Missing action");
     std::string action = req["action"].get<std::string>();
 
+    // ── PING ────────────────────────────────────────────────────────────────
     if (action == "PING")
         return ok({ {"message","pong"} });
 
+    // ── CREATE_PROFILE ───────────────────────────────────────────────────────
+    else if (action == "CREATE_PROFILE")
+    {
+        if (!req.contains("username") || !req.contains("password") ||
+            !req.contains("name") || !req.contains("email"))
+            return err("Missing fields");
+
+        std::string username = req["username"].get<std::string>();
+        std::string password = req["password"].get<std::string>();
+        std::string name = req["name"].get<std::string>();
+        std::string email = req["email"].get<std::string>();
+
+        std::filesystem::create_directories(PROFILES_DIR);
+
+        if (std::filesystem::exists(profileFile(username)))
+            return err("Username already taken");
+
+        Profile profile(username, hashPassword(password), name, email);
+        Save::saveProfile(profile, profileFile(username));
+
+        std::string token = generateToken();
+        g_profileSessions[token] = username;
+
+        return ok({ {"profile_token", token}, {"name", name}, {"email", email} });
+    }
+
+    // ── LOGIN_PROFILE ────────────────────────────────────────────────────────
+    else if (action == "LOGIN_PROFILE")
+    {
+        if (!req.contains("username") || !req.contains("password"))
+            return err("Missing fields");
+
+        std::string username = req["username"].get<std::string>();
+        std::string password = req["password"].get<std::string>();
+
+        Profile profile;
+        if (!Save::loadProfile(profile, profileFile(username)))
+            return err("User not found");
+
+        if (profile.getPasswordHash() != hashPassword(password))
+            return err("Invalid password");
+
+        std::string token = generateToken();
+        g_profileSessions[token] = username;
+
+        json crews = json::array();
+        for (const auto& c : profile.getCrews())
+            crews.push_back({ {"code", c.code}, {"token", c.token} });
+
+        return ok({
+            {"profile_token", token},
+            {"name", profile.getName()},
+            {"email", profile.getEmail()},
+            {"wishes", profile.getWishes()},
+            {"crews", crews}
+            });
+    }
+
+    // ── GET_PROFILE ──────────────────────────────────────────────────────────
+    else if (action == "GET_PROFILE")
+    {
+        if (!req.contains("profile_token")) return err("Missing profile_token");
+        Profile profile;
+        if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+            return err("Invalid profile token");
+
+        json crews = json::array();
+        for (const auto& c : profile.getCrews())
+            crews.push_back({ {"code", c.code}, {"token", c.token} });
+
+        return ok({
+            {"name", profile.getName()},
+            {"email", profile.getEmail()},
+            {"wishes", profile.getWishes()},
+            {"crews", crews}
+            });
+    }
+
+    // ── LINK_CREW_TO_PROFILE ─────────────────────────────────────────────────
+    else if (action == "LINK_CREW_TO_PROFILE")
+    {
+        if (!req.contains("profile_token") || !req.contains("invite_code") ||
+            !req.contains("crew_token"))
+            return err("Missing fields");
+
+        std::string profileToken = req["profile_token"].get<std::string>();
+        std::string code = req["invite_code"].get<std::string>();
+        std::string crewToken = req["crew_token"].get<std::string>();
+
+        Profile profile;
+        if (!getProfileByToken(profileToken, profile))
+            return err("Invalid profile token");
+
+        profile.addCrew(code, crewToken);
+        Save::saveProfile(profile, profileFile(profile.getUsername()));
+
+        return ok({ {"message", "Crew linked to profile"} });
+    }
+
+    // ── CREATE_CREW ──────────────────────────────────────────────────────────
     else if (action == "CREATE_CREW")
     {
-        if (!req.contains("crew_name") || !req.contains("user"))
-            return err("Missing crew_name or user");
+        if (!req.contains("crew_name") || !req.contains("profile_token"))
+            return err("Missing crew_name or profile_token");
+
+        Profile profile;
+        if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+            return err("Invalid profile token");
+
         std::string crewName = req["crew_name"].get<std::string>();
-        std::string name = req["user"]["name"].get<std::string>();
-        std::string email = req["user"]["email"].get<std::string>();
         std::string code = generateInviteCode();
         std::string token = generateToken();
-        Users owner(name, email);
+
+        Users owner(profile.getName(), profile.getEmail());
         owner.setToken(token);
+
         Crew crew(crewName);
         crew.setOwnerToken(token);
         crew.addUser(owner);
+
         std::filesystem::create_directories(CREWS_DIR);
         Save::saveCrew(crew, crewFile(code));
+
         auto invites = loadInvites();
         invites[code] = crewName;
         saveInvites(invites);
+
+        profile.addCrew(code, token);
+        Save::saveProfile(profile, profileFile(profile.getUsername()));
+
         return ok({ {"invite_code",code},{"token",token},{"is_owner",true} });
     }
 
+    // ── JOIN_CREW ────────────────────────────────────────────────────────────
     else if (action == "JOIN_CREW")
     {
-        if (!req.contains("invite_code") || !req.contains("user"))
-            return err("Missing invite_code or user");
+        if (!req.contains("invite_code") || !req.contains("profile_token"))
+            return err("Missing invite_code or profile_token");
+
         std::string code = req["invite_code"].get<std::string>();
-        std::string name = req["user"]["name"].get<std::string>();
-        std::string email = req["user"]["email"].get<std::string>();
+
+        Profile profile;
+        if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+            return err("Invalid profile token");
+
         Crew crew("");
         if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
+
+        // Check if already in crew
+        if (crew.findUserByName(profile.getName()))
+            return err("Already in this crew");
+
         std::string token = generateToken();
-        Users newUser(name, email);
+        Users newUser(profile.getName(), profile.getEmail());
         newUser.setToken(token);
         crew.addUser(newUser);
         Save::saveCrew(crew, crewFile(code));
+
+        profile.addCrew(code, token);
+        Save::saveProfile(profile, profileFile(profile.getUsername()));
+
         return ok({ {"token",token},{"is_owner",false} });
     }
 
+    // ── LOGIN_CREW ───────────────────────────────────────────────────────────
     else if (action == "LOGIN_CREW")
     {
-        if (!req.contains("invite_code") || !req.contains("name"))
-            return err("Missing invite_code or name");
+        if (!req.contains("invite_code") || !req.contains("profile_token"))
+            return err("Missing fields");
+
         std::string code = req["invite_code"].get<std::string>();
-        std::string name = req["name"].get<std::string>();
+
+        Profile profile;
+        if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+            return err("Invalid profile token");
+
         Crew crew("");
         if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
-        const Users* user = crew.findUserByName(name);
-        if (!user) return err("User not found");
+
+        const Users* user = crew.findUserByName(profile.getName());
+        if (!user) return err("Not a member of this crew");
+
         bool isOwner = (user->getToken() == crew.getOwnerToken());
-        return ok({ {"token",user->getToken()},{"is_owner",isOwner} });
+        return ok({ {"token", user->getToken()}, {"is_owner", isOwner} });
     }
 
+    // ── GET_CREW_STATUS ──────────────────────────────────────────────────────
     else if (action == "GET_CREW_STATUS")
     {
         if (!req.contains("invite_code")) return err("Missing invite_code");
@@ -138,6 +300,7 @@ static json handleRequest(const json& req)
         return ok({ {"participants_count",(int)crew.getUsers().size()},{"draw_done",drawDone} });
     }
 
+    // ── GET_PARTICIPANTS ─────────────────────────────────────────────────────
     else if (action == "GET_PARTICIPANTS")
     {
         if (!req.contains("invite_code")) return err("Missing invite_code");
@@ -149,6 +312,7 @@ static json handleRequest(const json& req)
         return ok({ {"participants",names} });
     }
 
+    // ── RUN_DRAW ─────────────────────────────────────────────────────────────
     else if (action == "RUN_DRAW")
     {
         if (!req.contains("invite_code") || !req.contains("admin_token"))
@@ -160,12 +324,12 @@ static json handleRequest(const json& req)
         if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
         if (crew.getUsers().size() < 3) return err("At least 3 participants required");
         Draw draw;
-        if (!draw.run(crew))
-            return err("Draw failed");
+        if (!draw.run(crew)) return err("Draw failed");
         Save::saveDrawResult(crewFile(code), draw.getResults());
         return ok({ {"message","Draw done"} });
     }
 
+    // ── SEND_EMAILS ──────────────────────────────────────────────────────────
     else if (action == "SEND_EMAILS")
     {
         if (!req.contains("invite_code") || !req.contains("admin_token"))
@@ -177,57 +341,80 @@ static json handleRequest(const json& req)
         if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
         std::map<std::string, std::string> draw;
         if (!Save::loadDrawResult(crewFile(code), draw)) return err("Draw not done yet");
+
+        // Inject profile wishes into crew users before sending emails
+        for (auto& user : crew.getUsers())
+        {
+            // Find profile matching this user's name
+            for (const auto& entry : std::filesystem::directory_iterator(PROFILES_DIR))
+            {
+                Profile p;
+                if (Save::loadProfile(p, entry.path().string()))
+                {
+                    if (p.getName() == user.getName())
+                    {
+                        user.clearWishes();
+                        for (const auto& w : p.getWishes())
+                            user.addWish(w);
+                        break;
+                    }
+                }
+            }
+        }
+
         Mailer mailer;
         mailer.send(crew, draw);
         return ok({ {"message","Emails sent"} });
     }
 
+    // ── ADD_WISH ─────────────────────────────────────────────────────────────
     else if (action == "ADD_WISH")
     {
-        if (!req.contains("invite_code") || !req.contains("token") || !req.contains("wish"))
+        if (!req.contains("profile_token") || !req.contains("wish"))
             return err("Missing fields");
-        std::string code = req["invite_code"].get<std::string>();
-        std::string token = req["token"].get<std::string>();
-        std::string wish = req["wish"].get<std::string>();
-        Crew crew("");
-        if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
-        Users* user = crew.findUserByToken(token);
-        if (!user) return err("Invalid token");
-        user->addWish(wish);
-        Save::saveCrew(crew, crewFile(code));
+
+        Profile profile;
+        if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+            return err("Invalid profile token");
+
+        profile.addWish(req["wish"].get<std::string>());
+        Save::saveProfile(profile, profileFile(profile.getUsername()));
         return ok({ {"message","Wish added"} });
     }
 
+    // ── REMOVE_WISH ──────────────────────────────────────────────────────────
     else if (action == "REMOVE_WISH")
     {
-        if (!req.contains("invite_code") || !req.contains("token") || !req.contains("index"))
+        if (!req.contains("profile_token") || !req.contains("index"))
             return err("Missing fields");
-        std::string code = req["invite_code"].get<std::string>();
-        std::string token = req["token"].get<std::string>();
+
+        Profile profile;
+        if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+            return err("Invalid profile token");
+
         int index = req["index"].get<int>();
-        Crew crew("");
-        if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
-        Users* user = crew.findUserByToken(token);
-        if (!user) return err("Invalid token");
-        if (index < 0 || index >= (int)user->getWishes().size()) return err("Invalid index");
-        user->removeWish(index);
-        Save::saveCrew(crew, crewFile(code));
+        if (index < 0 || index >= (int)profile.getWishes().size())
+            return err("Invalid index");
+
+        profile.removeWish(index);
+        Save::saveProfile(profile, profileFile(profile.getUsername()));
         return ok({ {"message","Wish removed"} });
     }
 
+    // ── GET_WISHES ───────────────────────────────────────────────────────────
     else if (action == "GET_WISHES")
     {
-        if (!req.contains("invite_code") || !req.contains("token"))
-            return err("Missing fields");
-        std::string code = req["invite_code"].get<std::string>();
-        std::string token = req["token"].get<std::string>();
-        Crew crew("");
-        if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
-        Users* user = crew.findUserByToken(token);
-        if (!user) return err("Invalid token");
-        return ok({ {"name",user->getName()},{"wishes",user->getWishes()} });
+        if (!req.contains("profile_token"))
+            return err("Missing profile_token");
+
+        Profile profile;
+        if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+            return err("Invalid profile token");
+
+        return ok({ {"name", profile.getName()}, {"wishes", profile.getWishes()} });
     }
 
+    // ── REMOVE_PARTICIPANT ───────────────────────────────────────────────────
     else if (action == "REMOVE_PARTICIPANT")
     {
         if (!req.contains("invite_code") || !req.contains("admin_token") || !req.contains("name"))
@@ -248,6 +435,7 @@ static json handleRequest(const json& req)
         return ok({ {"message","Participant removed"} });
     }
 
+    // ── RESET_DRAW ───────────────────────────────────────────────────────────
     else if (action == "RESET_DRAW")
     {
         if (!req.contains("invite_code") || !req.contains("admin_token"))
@@ -262,9 +450,14 @@ static json handleRequest(const json& req)
     return err("Unknown action: " + action);
 }
 
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
 int main()
 {
     std::filesystem::create_directories(CREWS_DIR);
+    std::filesystem::create_directories(PROFILES_DIR);
 
     httplib::SSLServer svr(
         "/etc/letsencrypt/live/santa.colep.fr/fullchain.pem",
@@ -283,7 +476,7 @@ int main()
         res.set_content(response.dump(), "application/json");
         });
 
-    std::cout << "SecretSanta HTTPS server on port 443..." << std::endl;
+    std::cout << "SecretSanta HTTPS server on port 8443..." << std::endl;
     svr.listen("0.0.0.0", 8443);
     return 0;
 }

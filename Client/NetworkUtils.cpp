@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 static const char* SERVER_HOST = "santa.colep.fr";
-static const int   SERVER_PORT = 8443;
+static const int   SERVER_PORT = 443;
 
 nlohmann::json sendRequest(const nlohmann::json& request)
 {

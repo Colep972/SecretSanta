@@ -10,9 +10,11 @@ using json = nlohmann::json;
 static const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
 
 // Session state
-static std::string m_inviteCode;
-static std::string m_token;
+static std::string m_profileToken;
 static std::string m_name;
+static std::string m_email;
+static std::string m_inviteCode;
+static std::string m_crewToken;
 static bool        m_isAdmin = false;
 static int         m_participantCount = 0;
 static bool        m_drawDone = false;
@@ -44,12 +46,12 @@ static void printResponse(const json& res)
         std::cout << "  " << res["message"].get<std::string>() << "\n";
     if (res.contains("invite_code"))
         std::cout << "  Code crew    : " << res["invite_code"].get<std::string>() << "\n";
-    if (res.contains("token"))
-        std::cout << "  Votre token  : " << res["token"].get<std::string>() << "  (notez-le !)\n";
     if (res.contains("participants_count"))
         std::cout << "  Participants : " << res["participants_count"] << "\n";
     if (res.contains("name"))
         std::cout << "  Nom          : " << res["name"].get<std::string>() << "\n";
+    if (res.contains("email"))
+        std::cout << "  Email        : " << res["email"].get<std::string>() << "\n";
     if (res.contains("participants")) {
         std::cout << "  Participants :\n";
         for (const auto& p : res["participants"])
@@ -67,6 +69,17 @@ static void printResponse(const json& res)
                 std::cout << "    [" << idx++ << "] " << w.get<std::string>() << "\n";
         }
     }
+    if (res.contains("crews")) {
+        auto& crews = res["crews"];
+        if (crews.empty()) {
+            std::cout << "  Crews : (aucun)\n";
+        }
+        else {
+            std::cout << "  Crews :\n";
+            for (const auto& c : crews)
+                std::cout << "    - " << c["code"].get<std::string>() << "\n";
+        }
+    }
 }
 
 static json call(const json& req)
@@ -80,184 +93,294 @@ static json call(const json& req)
 }
 
 // ---------------------------------------------------------------------------
+// Profile menu
+// ---------------------------------------------------------------------------
 
-int main()
+static void profileMenu()
 {
-    std::cout << "SecretSanta - connexion a santa.colep.fr\n";
-
-    bool running = true;
-    while (running)
+    while (true)
     {
-        std::cout << "\n";
-        if (!m_inviteCode.empty())
-            std::cout << "  [" << m_name << " | crew " << m_inviteCode
-            << (m_isAdmin ? " | admin" : "") << "]\n\n";
-
-        std::cout << "  1.  Creer un crew\n";
-        std::cout << "  2.  Se connecter a un crew (login)\n";
-        std::cout << "  3.  Rejoindre un crew\n";
-
-        if (m_isAdmin && m_participantCount >= 3 && !m_drawDone)
-            std::cout << "  4.  Lancer le tirage\n";
-        if (m_isAdmin && m_drawDone)
-            std::cout << "  5.  Envoyer les emails\n";
-        if (!m_inviteCode.empty()) {
-            std::cout << "  6.  Voir ma liste de voeux\n";
-            std::cout << "  7.  Ajouter un voeu\n";
-            std::cout << "  8.  Supprimer un voeu\n";
-        }
-        if (m_isAdmin) {
-            std::cout << "  10. Retirer un participant\n";
-            if (m_drawDone)
-                std::cout << "  11. Reinitialiser le tirage\n";
-        }
-        std::cout << "  9.  Quitter\n";
+        std::cout << "\n  Bienvenue sur SecretSanta !\n\n";
+        std::cout << "  1. Creer un profil\n";
+        std::cout << "  2. Se connecter\n";
+        std::cout << "  3. Continuer sans profil\n";
         std::cout << "  Choix : ";
 
         int choice;
         std::cin >> choice;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-        // ── 1. CREATE CREW ──────────────────────────────────────────────────
         if (choice == 1)
         {
-            std::string crewName, name, email;
+            std::string username, password, name, email;
+            std::cout << "Nom d'utilisateur : "; std::getline(std::cin, username);
+            std::cout << "Mot de passe      : "; std::getline(std::cin, password);
+            std::cout << "Votre nom         : "; std::getline(std::cin, name);
+            std::cout << "Votre email       : "; std::getline(std::cin, email);
+
+            json req;
+            req["action"] = "CREATE_PROFILE";
+            req["username"] = username;
+            req["password"] = password;
+            req["name"] = name;
+            req["email"] = email;
+
+            json res = call(req);
+            printResponse(res);
+
+            if (res["status"] == "OK") {
+                m_profileToken = res["profile_token"].get<std::string>();
+                m_name = res["name"].get<std::string>();
+                m_email = res["email"].get<std::string>();
+                return;
+            }
+        }
+        else if (choice == 2)
+        {
+            std::string username, password;
+            std::cout << "Nom d'utilisateur : "; std::getline(std::cin, username);
+            std::cout << "Mot de passe      : "; std::getline(std::cin, password);
+
+            json req;
+            req["action"] = "LOGIN_PROFILE";
+            req["username"] = username;
+            req["password"] = password;
+
+            json res = call(req);
+            printResponse(res);
+
+            if (res["status"] == "OK") {
+                m_profileToken = res["profile_token"].get<std::string>();
+                m_name = res["name"].get<std::string>();
+                m_email = res["email"].get<std::string>();
+
+                if (res.contains("crews") && !res["crews"].empty()) {
+                    auto& firstCrew = res["crews"][0];
+                    m_inviteCode = firstCrew["code"].get<std::string>();
+                    m_crewToken = firstCrew["token"].get<std::string>();
+                    refreshCrewStatus();
+                    std::cout << "  Crew restaure : " << m_inviteCode << "\n";
+                }
+                return;
+            }
+        }
+        else if (choice == 3)
+        {
+            return;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Main menu
+// ---------------------------------------------------------------------------
+
+int main()
+{
+    std::cout << "SecretSanta - santa.colep.fr\n";
+
+    profileMenu();
+
+    bool running = true;
+    while (running)
+    {
+        std::cout << "\n";
+
+        if (!m_name.empty())
+            std::cout << "  [" << m_name
+            << (!m_inviteCode.empty() ? " | crew " + m_inviteCode : "")
+            << (m_isAdmin ? " | admin" : "")
+            << "]\n\n";
+
+        // Build menu dynamically with sequential numbers
+        int opt = 1;
+        std::map<int, std::string> menu;
+
+        menu[opt++] = "CREATE_CREW";
+        menu[opt++] = "LOGIN_CREW";
+        menu[opt++] = "JOIN_CREW";
+
+        if (m_isAdmin && m_participantCount >= 3 && !m_drawDone)
+            menu[opt++] = "RUN_DRAW";
+        if (m_isAdmin && m_drawDone)
+            menu[opt++] = "SEND_EMAILS";
+        if (!m_profileToken.empty()) {
+            menu[opt++] = "GET_WISHES";
+            menu[opt++] = "ADD_WISH";
+            menu[opt++] = "REMOVE_WISH";
+            menu[opt++] = "GET_PROFILE";
+        }
+        if (m_isAdmin) {
+            menu[opt++] = "REMOVE_PARTICIPANT";
+            if (m_drawDone)
+                menu[opt++] = "RESET_DRAW";
+        }
+        int quitOpt = opt;
+        menu[opt++] = "QUIT";
+
+        // Print menu
+        static const std::map<std::string, std::string> labels = {
+            {"CREATE_CREW",        "Creer un crew"},
+            {"LOGIN_CREW",         "Se connecter a un crew"},
+            {"JOIN_CREW",          "Rejoindre un crew"},
+            {"RUN_DRAW",           "Lancer le tirage"},
+            {"SEND_EMAILS",        "Envoyer les emails"},
+            {"GET_WISHES",         "Voir ma liste de voeux"},
+            {"ADD_WISH",           "Ajouter un voeu"},
+            {"REMOVE_WISH",        "Supprimer un voeu"},
+            {"GET_PROFILE",        "Voir mon profil"},
+            {"REMOVE_PARTICIPANT", "Retirer un participant"},
+            {"RESET_DRAW",         "Reinitialiser le tirage"},
+            {"QUIT",               "Quitter"},
+        };
+
+        for (const auto& [n, action] : menu)
+            std::cout << "  " << n << ". " << labels.at(action) << "\n";
+
+        std::cout << "  Choix : ";
+        int choice;
+        std::cin >> choice;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+        if (menu.find(choice) == menu.end()) continue;
+        std::string action = menu[choice];
+
+        // ── QUIT ────────────────────────────────────────────────────────────
+        if (action == "QUIT")
+        {
+            running = false;
+        }
+
+        // ── CREATE CREW ─────────────────────────────────────────────────────
+        else if (action == "CREATE_CREW")
+        {
+            if (m_profileToken.empty()) {
+                std::cout << "  Vous devez etre connecte a un profil.\n"; continue;
+            }
+            std::string crewName;
             std::cout << "Nom du crew : "; std::getline(std::cin, crewName);
-            std::cout << "Ton nom     : "; std::getline(std::cin, name);
-            std::cout << "Ton email   : "; std::getline(std::cin, email);
 
             json req;
             req["action"] = "CREATE_CREW";
             req["crew_name"] = crewName;
-            req["user"]["name"] = name;
-            req["user"]["email"] = email;
+            req["profile_token"] = m_profileToken;
 
             json res = call(req);
             printResponse(res);
 
             if (res["status"] == "OK") {
                 m_inviteCode = res["invite_code"].get<std::string>();
-                m_token = res["token"].get<std::string>();
-                m_name = name;
+                m_crewToken = res["token"].get<std::string>();
                 m_isAdmin = true;
                 refreshCrewStatus();
             }
         }
 
-        // ── 2. LOGIN ────────────────────────────────────────────────────────
-        else if (choice == 2)
+        // ── LOGIN CREW ──────────────────────────────────────────────────────
+        else if (action == "LOGIN_CREW")
         {
-            std::string code, name;
+            if (m_profileToken.empty()) {
+                std::cout << "  Vous devez etre connecte a un profil.\n"; continue;
+            }
+            std::string code;
             std::cout << "Code du crew : "; std::getline(std::cin, code);
-            std::cout << "Ton nom      : "; std::getline(std::cin, name);
 
             json req;
             req["action"] = "LOGIN_CREW";
             req["invite_code"] = code;
-            req["name"] = name;
+            req["profile_token"] = m_profileToken;
 
             json res = call(req);
             printResponse(res);
 
             if (res["status"] == "OK") {
                 m_inviteCode = code;
-                m_token = res["token"].get<std::string>();
-                m_name = name;
+                m_crewToken = res["token"].get<std::string>();
                 m_isAdmin = res["is_owner"].get<bool>();
                 refreshCrewStatus();
             }
         }
 
-        // ── 3. JOIN CREW ────────────────────────────────────────────────────
-        else if (choice == 3)
+        // ── JOIN CREW ───────────────────────────────────────────────────────
+        else if (action == "JOIN_CREW")
         {
-            std::string code, name, email;
+            if (m_profileToken.empty()) {
+                std::cout << "  Vous devez etre connecte a un profil.\n"; continue;
+            }
+            std::string code;
             std::cout << "Code du crew : "; std::getline(std::cin, code);
-            std::cout << "Ton nom      : "; std::getline(std::cin, name);
-            std::cout << "Ton email    : "; std::getline(std::cin, email);
 
             json req;
             req["action"] = "JOIN_CREW";
             req["invite_code"] = code;
-            req["user"]["name"] = name;
-            req["user"]["email"] = email;
+            req["profile_token"] = m_profileToken;
 
             json res = call(req);
             printResponse(res);
 
             if (res["status"] == "OK") {
                 m_inviteCode = code;
-                m_token = res["token"].get<std::string>();
-                m_name = name;
+                m_crewToken = res["token"].get<std::string>();
                 m_isAdmin = false;
                 refreshCrewStatus();
             }
         }
 
-        // ── 4. RUN DRAW ─────────────────────────────────────────────────────
-        else if (choice == 4)
+        // ── RUN DRAW ────────────────────────────────────────────────────────
+        else if (action == "RUN_DRAW")
         {
             json req;
             req["action"] = "RUN_DRAW";
             req["invite_code"] = m_inviteCode;
             req["admin_token"] = ADMIN_TOKEN;
-
             json res = call(req);
             printResponse(res);
             if (res["status"] == "OK") refreshCrewStatus();
         }
 
-        // ── 5. SEND EMAILS ──────────────────────────────────────────────────
-        else if (choice == 5)
+        // ── SEND EMAILS ─────────────────────────────────────────────────────
+        else if (action == "SEND_EMAILS")
         {
             json req;
             req["action"] = "SEND_EMAILS";
             req["invite_code"] = m_inviteCode;
             req["admin_token"] = ADMIN_TOKEN;
-
-            json res = call(req);
-            printResponse(res);
-        }
-
-        // ── 6. VIEW WISHES ──────────────────────────────────────────────────
-        else if (choice == 6)
-        {
-            json req;
-            req["action"] = "GET_WISHES";
-            req["invite_code"] = m_inviteCode;
-            req["token"] = m_token;
-
             printResponse(call(req));
         }
 
-        // ── 7. ADD WISH ─────────────────────────────────────────────────────
-        else if (choice == 7)
+        // ── GET WISHES ──────────────────────────────────────────────────────
+        else if (action == "GET_WISHES")
+        {
+            json req;
+            req["action"] = "GET_WISHES";
+            req["profile_token"] = m_profileToken;
+            printResponse(call(req));
+        }
+
+        // ── ADD WISH ────────────────────────────────────────────────────────
+        else if (action == "ADD_WISH")
         {
             std::string wish;
             std::cout << "Votre voeu : "; std::getline(std::cin, wish);
 
             json req;
             req["action"] = "ADD_WISH";
-            req["invite_code"] = m_inviteCode;
-            req["token"] = m_token;
+            req["profile_token"] = m_profileToken;
             req["wish"] = wish;
-
             printResponse(call(req));
         }
 
-        // ── 8. REMOVE WISH ──────────────────────────────────────────────────
-        else if (choice == 8)
+        // ── REMOVE WISH ─────────────────────────────────────────────────────
+        else if (action == "REMOVE_WISH")
         {
             json getReq;
             getReq["action"] = "GET_WISHES";
-            getReq["invite_code"] = m_inviteCode;
-            getReq["token"] = m_token;
+            getReq["profile_token"] = m_profileToken;
             json getRes = call(getReq);
             printResponse(getRes);
 
             if (!getRes.contains("wishes") || getRes["wishes"].empty()) {
-                std::cout << "  Aucun voeu a supprimer.\n";
-                continue;
+                std::cout << "  Aucun voeu a supprimer.\n"; continue;
             }
 
             int index;
@@ -267,21 +390,22 @@ int main()
 
             json req;
             req["action"] = "REMOVE_WISH";
-            req["invite_code"] = m_inviteCode;
-            req["token"] = m_token;
+            req["profile_token"] = m_profileToken;
             req["index"] = index;
-
             printResponse(call(req));
         }
 
-        // ── 9. QUIT ─────────────────────────────────────────────────────────
-        else if (choice == 9)
+        // ── GET PROFILE ─────────────────────────────────────────────────────
+        else if (action == "GET_PROFILE")
         {
-            running = false;
+            json req;
+            req["action"] = "GET_PROFILE";
+            req["profile_token"] = m_profileToken;
+            printResponse(call(req));
         }
 
-        // ── 10. REMOVE PARTICIPANT ───────────────────────────────────────────
-        else if (choice == 10)
+        // ── REMOVE PARTICIPANT ───────────────────────────────────────────────
+        else if (action == "REMOVE_PARTICIPANT")
         {
             json listReq;
             listReq["action"] = "GET_PARTICIPANTS";
@@ -303,8 +427,8 @@ int main()
             if (res["status"] == "OK") refreshCrewStatus();
         }
 
-        // ── 11. RESET DRAW ───────────────────────────────────────────────────
-        else if (choice == 11)
+        // ── RESET DRAW ───────────────────────────────────────────────────────
+        else if (action == "RESET_DRAW")
         {
             std::cout << "  Attention : les emails ont peut-etre deja ete envoyes. Continuer ? (o/n) : ";
             char c; std::cin >> c;
