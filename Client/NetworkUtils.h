@@ -1,7 +1,5 @@
 #pragma once
 #include <string>
-#include <winsock2.h>
+#include "../external/json.hpp"
 
-bool sendJson(SOCKET sock, const std::string& json);
-bool recvJson(SOCKET sock, std::string& json);
-
+nlohmann::json sendRequest(const nlohmann::json& request);

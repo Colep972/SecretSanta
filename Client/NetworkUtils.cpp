@@ -1,26 +1,25 @@
+#pragma warning(disable: 4996)
+#define NOMINMAX
+#define CPPHTTPLIB_OPENSSL_SUPPORT
+#include "httplib.h"
 #include "NetworkUtils.h"
+#include <stdexcept>
 
-bool sendJson(SOCKET sock, const std::string& json)
+static const char* SERVER_HOST = "santa.colep.fr";
+static const int   SERVER_PORT = 8443;
+
+nlohmann::json sendRequest(const nlohmann::json& request)
 {
-    std::string msg = json + "\n";
-    return send(sock, msg.c_str(), msg.size(), 0) != SOCKET_ERROR;
-}
+    httplib::SSLClient cli(SERVER_HOST, SERVER_PORT);
+    cli.enable_server_certificate_verification(false);
 
-bool recvJson(SOCKET sock, std::string& json)
-{
-    json.clear();
-    char c;
+    auto result = cli.Post("/api", request.dump(), "application/json");
 
-    while (true)
-    {
-        int bytes = recv(sock, &c, 1, 0);
-        if (bytes <= 0)
-            return false;
+    if (!result)
+        throw std::runtime_error("Connection failed: " + httplib::to_string(result.error()));
 
-        if (c == '\n')
-            break;
+    if (result->status != 200)
+        throw std::runtime_error("HTTP error: " + std::to_string(result->status));
 
-        json += c;
-    }
-    return true;
+    return nlohmann::json::parse(result->body);
 }

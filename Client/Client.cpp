@@ -3,7 +3,7 @@
 #include <limits>
 #include <string>
 #include "NetworkUtils.h"
-#include <nlohmann/json.hpp>
+#include "../external/json.hpp"
 
 using json = nlohmann::json;
 
