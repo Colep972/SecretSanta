@@ -1,5 +1,4 @@
-﻿#define CPPHTTPLIB_OPENSSL_SUPPORT
-#include "httplib.h"
+﻿#include "httplib.h"
 #include "Crew.h"
 #include "Users.h"
 #include "Save.h"
@@ -511,7 +510,7 @@ int main()
     std::filesystem::create_directories(CREWS_DIR);
     std::filesystem::create_directories(PROFILES_DIR);
 
-    httplib::Server svr(
+    httplib::SSLServer svr(
         "/etc/letsencrypt/live/santa.colep.fr/fullchain.pem",
         "/etc/letsencrypt/live/santa.colep.fr/privkey.pem"
     );
