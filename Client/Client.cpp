@@ -7,7 +7,7 @@
 
 using json = nlohmann::json;
 
-static const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
+static const std::string ADMIN_TOKEN = "GENIE-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
 
 // Session state
 static std::string m_profileToken;
@@ -115,8 +115,24 @@ static void profileMenu()
             std::string username, password, name, email;
             std::cout << "Nom d'utilisateur : "; std::getline(std::cin, username);
             std::cout << "Mot de passe      : "; std::getline(std::cin, password);
-            std::cout << "Votre nom         : "; std::getline(std::cin, name);
-            std::cout << "Votre email       : "; std::getline(std::cin, email);
+
+            if (!m_name.empty()) {
+                std::cout << "Votre nom [" << m_name << "] (Entree pour confirmer) : ";
+                std::string input; std::getline(std::cin, input);
+                name = input.empty() ? m_name : input;
+            }
+            else {
+                std::cout << "Votre nom   : "; std::getline(std::cin, name);
+            }
+
+            if (!m_email.empty()) {
+                std::cout << "Votre email [" << m_email << "] (Entree pour confirmer) : ";
+                std::string input; std::getline(std::cin, input);
+                email = input.empty() ? m_email : input;
+            }
+            else {
+                std::cout << "Votre email : "; std::getline(std::cin, email);
+            }
 
             json req;
             req["action"] = "CREATE_PROFILE";
@@ -132,6 +148,16 @@ static void profileMenu()
                 m_profileToken = res["profile_token"].get<std::string>();
                 m_name = res["name"].get<std::string>();
                 m_email = res["email"].get<std::string>();
+
+                if (!m_inviteCode.empty() && !m_crewToken.empty()) {
+                    json linkReq;
+                    linkReq["action"] = "LINK_CREW_TO_PROFILE";
+                    linkReq["profile_token"] = m_profileToken;
+                    linkReq["invite_code"] = m_inviteCode;
+                    linkReq["crew_token"] = m_crewToken;
+                    call(linkReq);
+                    std::cout << "  Crew " << m_inviteCode << " lie a votre profil.\n";
+                }
                 return;
             }
         }
@@ -177,7 +203,7 @@ static void profileMenu()
 
 int main()
 {
-    std::cout << "SecretSanta - santa.colep.fr\n";
+    std::cout << "Genie - santa.colep.fr\n";
 
     profileMenu();
 
@@ -196,6 +222,8 @@ int main()
         int opt = 1;
         std::map<int, std::string> menu;
 
+        if (m_profileToken.empty())
+            menu[opt++] = "CREATE_PROFILE_MAIN";
         menu[opt++] = "CREATE_CREW";
         menu[opt++] = "LOGIN_CREW";
         menu[opt++] = "JOIN_CREW";
@@ -232,10 +260,11 @@ int main()
             {"REMOVE_PARTICIPANT", "Retirer un participant"},
             {"RESET_DRAW",         "Reinitialiser le tirage"},
             {"QUIT",               "Quitter"},
+            {"CREATE_PROFILE_MAIN", "Creer / Se connecter a un profil"},
         };
 
-        for (const auto& [n, action] : menu)
-            std::cout << "  " << n << ". " << labels.at(action) << "\n";
+        for (const auto& entry : menu)
+            std::cout << "  " << entry.first << ". " << labels.at(entry.second) << "\n";
 
         std::cout << "  Choix : ";
         int choice;
@@ -245,8 +274,14 @@ int main()
         if (menu.find(choice) == menu.end()) continue;
         std::string action = menu[choice];
 
+        // ── CREATE PROFILE FROM MAIN MENU ───────────────────────────────────
+        if (action == "CREATE_PROFILE_MAIN")
+        {
+            profileMenu();
+        }
+
         // ── QUIT ────────────────────────────────────────────────────────────
-        if (action == "QUIT")
+        else if (action == "QUIT")
         {
             running = false;
         }
@@ -254,16 +289,22 @@ int main()
         // ── CREATE CREW ─────────────────────────────────────────────────────
         else if (action == "CREATE_CREW")
         {
-            if (m_profileToken.empty()) {
-                std::cout << "  Vous devez etre connecte a un profil.\n"; continue;
-            }
             std::string crewName;
             std::cout << "Nom du crew : "; std::getline(std::cin, crewName);
+
+            // Without profile: ask for name and email
+            if (m_profileToken.empty() && m_name.empty()) {
+                std::cout << "Votre nom   : "; std::getline(std::cin, m_name);
+                std::cout << "Votre email : "; std::getline(std::cin, m_email);
+            }
 
             json req;
             req["action"] = "CREATE_CREW";
             req["crew_name"] = crewName;
-            req["profile_token"] = m_profileToken;
+            if (!m_profileToken.empty())
+                req["profile_token"] = m_profileToken;
+            else
+                req["user"] = { {"name", m_name}, {"email", m_email} };
 
             json res = call(req);
             printResponse(res);
@@ -279,16 +320,21 @@ int main()
         // ── LOGIN CREW ──────────────────────────────────────────────────────
         else if (action == "LOGIN_CREW")
         {
-            if (m_profileToken.empty()) {
-                std::cout << "  Vous devez etre connecte a un profil.\n"; continue;
-            }
             std::string code;
             std::cout << "Code du crew : "; std::getline(std::cin, code);
+
+            // Without profile: ask for name if not known
+            if (m_profileToken.empty() && m_name.empty()) {
+                std::cout << "Votre nom   : "; std::getline(std::cin, m_name);
+            }
 
             json req;
             req["action"] = "LOGIN_CREW";
             req["invite_code"] = code;
-            req["profile_token"] = m_profileToken;
+            if (!m_profileToken.empty())
+                req["profile_token"] = m_profileToken;
+            else
+                req["name"] = m_name;
 
             json res = call(req);
             printResponse(res);
@@ -304,16 +350,22 @@ int main()
         // ── JOIN CREW ───────────────────────────────────────────────────────
         else if (action == "JOIN_CREW")
         {
-            if (m_profileToken.empty()) {
-                std::cout << "  Vous devez etre connecte a un profil.\n"; continue;
-            }
             std::string code;
             std::cout << "Code du crew : "; std::getline(std::cin, code);
+
+            // Without profile: ask for name and email if not known
+            if (m_profileToken.empty() && m_name.empty()) {
+                std::cout << "Votre nom   : "; std::getline(std::cin, m_name);
+                std::cout << "Votre email : "; std::getline(std::cin, m_email);
+            }
 
             json req;
             req["action"] = "JOIN_CREW";
             req["invite_code"] = code;
-            req["profile_token"] = m_profileToken;
+            if (!m_profileToken.empty())
+                req["profile_token"] = m_profileToken;
+            else
+                req["user"] = { {"name", m_name}, {"email", m_email} };
 
             json res = call(req);
             printResponse(res);

@@ -21,7 +21,7 @@ static const std::string DATA_DIR = "ServerData/";
 static const std::string CREWS_DIR = "ServerData/Crews/";
 static const std::string PROFILES_DIR = "ServerData/Profiles/";
 static const std::string INVITES_FILE = DATA_DIR + "invites.json";
-static const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
+static const std::string ADMIN_TOKEN = "GENIE-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -204,18 +204,35 @@ static json handleRequest(const json& req)
     // ── CREATE_CREW ──────────────────────────────────────────────────────────
     else if (action == "CREATE_CREW")
     {
-        if (!req.contains("crew_name") || !req.contains("profile_token"))
-            return err("Missing crew_name or profile_token");
-
-        Profile profile;
-        if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
-            return err("Invalid profile token");
+        if (!req.contains("crew_name"))
+            return err("Missing crew_name");
 
         std::string crewName = req["crew_name"].get<std::string>();
         std::string code = generateInviteCode();
         std::string token = generateToken();
+        std::string name, email;
 
-        Users owner(profile.getName(), profile.getEmail());
+        // With profile
+        if (req.contains("profile_token"))
+        {
+            Profile profile;
+            if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+                return err("Invalid profile token");
+            name = profile.getName();
+            email = profile.getEmail();
+            profile.addCrew(code, token);
+            Save::saveProfile(profile, profileFile(profile.getUsername()));
+        }
+        else
+        {
+            // Without profile — need user field
+            if (!req.contains("user"))
+                return err("Missing profile_token or user");
+            name = req["user"]["name"].get<std::string>();
+            email = req["user"]["email"].get<std::string>();
+        }
+
+        Users owner(name, email);
         owner.setToken(token);
 
         Crew crew(crewName);
@@ -229,59 +246,94 @@ static json handleRequest(const json& req)
         invites[code] = crewName;
         saveInvites(invites);
 
-        profile.addCrew(code, token);
-        Save::saveProfile(profile, profileFile(profile.getUsername()));
-
         return ok({ {"invite_code",code},{"token",token},{"is_owner",true} });
     }
 
     // ── JOIN_CREW ────────────────────────────────────────────────────────────
     else if (action == "JOIN_CREW")
     {
-        if (!req.contains("invite_code") || !req.contains("profile_token"))
-            return err("Missing invite_code or profile_token");
+        if (!req.contains("invite_code"))
+            return err("Missing invite_code");
 
         std::string code = req["invite_code"].get<std::string>();
-
-        Profile profile;
-        if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
-            return err("Invalid profile token");
+        std::string name, email;
 
         Crew crew("");
         if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
 
-        // Check if already in crew
-        if (crew.findUserByName(profile.getName()))
-            return err("Already in this crew");
+        // With profile
+        if (req.contains("profile_token"))
+        {
+            Profile profile;
+            if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+                return err("Invalid profile token");
+            name = profile.getName();
+            email = profile.getEmail();
 
-        std::string token = generateToken();
-        Users newUser(profile.getName(), profile.getEmail());
-        newUser.setToken(token);
-        crew.addUser(newUser);
-        Save::saveCrew(crew, crewFile(code));
+            if (crew.findUserByName(name))
+                return err("Already in this crew");
 
-        profile.addCrew(code, token);
-        Save::saveProfile(profile, profileFile(profile.getUsername()));
+            std::string token = generateToken();
+            Users newUser(name, email);
+            newUser.setToken(token);
+            crew.addUser(newUser);
+            Save::saveCrew(crew, crewFile(code));
 
-        return ok({ {"token",token},{"is_owner",false} });
+            profile.addCrew(code, token);
+            Save::saveProfile(profile, profileFile(profile.getUsername()));
+
+            return ok({ {"token",token},{"is_owner",false} });
+        }
+        else
+        {
+            // Without profile — need user field
+            if (!req.contains("user"))
+                return err("Missing profile_token or user");
+            name = req["user"]["name"].get<std::string>();
+            email = req["user"]["email"].get<std::string>();
+
+            if (crew.findUserByName(name))
+                return err("Already in this crew");
+
+            std::string token = generateToken();
+            Users newUser(name, email);
+            newUser.setToken(token);
+            crew.addUser(newUser);
+            Save::saveCrew(crew, crewFile(code));
+
+            return ok({ {"token",token},{"is_owner",false} });
+        }
     }
 
     // ── LOGIN_CREW ───────────────────────────────────────────────────────────
     else if (action == "LOGIN_CREW")
     {
-        if (!req.contains("invite_code") || !req.contains("profile_token"))
-            return err("Missing fields");
+        if (!req.contains("invite_code"))
+            return err("Missing invite_code");
 
         std::string code = req["invite_code"].get<std::string>();
+        std::string name;
 
-        Profile profile;
-        if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
-            return err("Invalid profile token");
+        if (req.contains("profile_token"))
+        {
+            Profile profile;
+            if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+                return err("Invalid profile token");
+            name = profile.getName();
+        }
+        else if (req.contains("name"))
+        {
+            name = req["name"].get<std::string>();
+        }
+        else
+        {
+            return err("Missing profile_token or name");
+        }
 
         Crew crew("");
         if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
 
-        const Users* user = crew.findUserByName(profile.getName());
+        const Users* user = crew.findUserByName(name);
         if (!user) return err("Not a member of this crew");
 
         bool isOwner = (user->getToken() == crew.getOwnerToken());

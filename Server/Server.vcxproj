@@ -127,6 +127,7 @@
     <ClCompile Include="Draw.cpp" />
     <ClCompile Include="Mailer.cpp" />
     <ClCompile Include="NetworkUtils.cpp" />
+    <ClCompile Include="Profile.cpp" />
     <ClCompile Include="Save.cpp" />
     <ClCompile Include="server_linux.cpp" />
     <ClCompile Include="Users.cpp" />
@@ -136,6 +137,7 @@
     <ClInclude Include="Draw.h" />
     <ClInclude Include="Mailer.h" />
     <ClInclude Include="NetworkUtils.h" />
+    <ClInclude Include="Profile.h" />
     <ClInclude Include="Save.h" />
     <ClInclude Include="Users.h" />
   </ItemGroup>
