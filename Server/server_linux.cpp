@@ -510,10 +510,7 @@ int main()
     std::filesystem::create_directories(CREWS_DIR);
     std::filesystem::create_directories(PROFILES_DIR);
 
-    httplib::SSLServer svr(
-        "/etc/letsencrypt/live/santa.colep.fr/fullchain.pem",
-        "/etc/letsencrypt/live/santa.colep.fr/privkey.pem"
-    );
+    httplib::Server svr;
 
     svr.Post("/api", [](const httplib::Request& req, httplib::Response& res) {
         json response;
