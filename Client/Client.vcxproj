@@ -105,7 +105,7 @@
       <AdditionalUsingDirectories>
       </AdditionalUsingDirectories>
       <AdditionalIncludeDirectories>C:\Program Files\OpenSSL-Win64\include</AdditionalIncludeDirectories>
-      <LanguageStandard>Par défaut (norme ISO C++17)</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
@@ -126,7 +126,7 @@
       <AdditionalUsingDirectories>
       </AdditionalUsingDirectories>
       <AdditionalIncludeDirectories>C:\Program Files\OpenSSL-Win64\include</AdditionalIncludeDirectories>
-      <LanguageStandard>Par défaut (norme ISO C++17)</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>

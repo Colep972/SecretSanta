@@ -511,7 +511,7 @@ int main()
     std::filesystem::create_directories(CREWS_DIR);
     std::filesystem::create_directories(PROFILES_DIR);
 
-    httplib::SSLServer svr(
+    httplib::Server svr(
         "/etc/letsencrypt/live/santa.colep.fr/fullchain.pem",
         "/etc/letsencrypt/live/santa.colep.fr/privkey.pem"
     );

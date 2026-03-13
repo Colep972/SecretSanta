@@ -1,7 +1,11 @@
 ﻿#define NOMINMAX
 #include <iostream>
+#include <fstream>
 #include <limits>
+#include <map>
 #include <string>
+#include <windows.h>
+#include <shellapi.h>
 #include "NetworkUtils.h"
 #include "../external/json.hpp"
 
@@ -100,16 +104,16 @@ static void profileMenu()
 {
     while (true)
     {
-        std::cout << "\n  Bienvenue sur SecretSanta !\n\n";
+        std::cout << "\n  Bienvenue sur Genie !\n\n";
         std::cout << "  1. Creer un profil\n";
         std::cout << "  2. Se connecter\n";
         std::cout << "  3. Continuer sans profil\n";
+        std::cout << "  --. Quitter\n";
         std::cout << "  Choix : ";
 
         int choice;
         std::cin >> choice;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
         if (choice == 1)
         {
             std::string username, password, name, email;
@@ -130,7 +134,8 @@ static void profileMenu()
                 std::string input; std::getline(std::cin, input);
                 email = input.empty() ? m_email : input;
             }
-            else {
+            else 
+            {
                 std::cout << "Votre email : "; std::getline(std::cin, email);
             }
 
@@ -194,6 +199,10 @@ static void profileMenu()
         {
             return;
         }
+        else if (choice == 4)
+        {
+            exit(0);
+        }
     }
 }
 
@@ -235,6 +244,7 @@ int main()
         if (!m_profileToken.empty()) {
             menu[opt++] = "GET_WISHES";
             menu[opt++] = "ADD_WISH";
+            menu[opt++] = "EXPORT_WISHLIST";
             menu[opt++] = "REMOVE_WISH";
             menu[opt++] = "GET_PROFILE";
         }
@@ -254,6 +264,7 @@ int main()
             {"RUN_DRAW",           "Lancer le tirage"},
             {"SEND_EMAILS",        "Envoyer les emails"},
             {"GET_WISHES",         "Voir ma liste de voeux"},
+            {"EXPORT_WISHLIST",    "Exporter ma liste de voeux (HTML)"},
             {"ADD_WISH",           "Ajouter un voeu"},
             {"REMOVE_WISH",        "Supprimer un voeu"},
             {"GET_PROFILE",        "Voir mon profil"},
@@ -398,6 +409,59 @@ int main()
             req["invite_code"] = m_inviteCode;
             req["admin_token"] = ADMIN_TOKEN;
             printResponse(call(req));
+        }
+
+        // ── EXPORT WISHLIST ─────────────────────────────────────────────────
+        else if (action == "EXPORT_WISHLIST")
+        {
+            json req;
+            req["action"] = "GET_WISHES";
+            req["profile_token"] = m_profileToken;
+            json res = call(req);
+
+            if (res["status"] != "OK") { printResponse(res); }
+            else
+            {
+                std::string name = res.value("name", m_name);
+                auto& wishes = res["wishes"];
+
+                std::string html =
+                    "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
+                    "<title>Liste de voeux - " + name + "</title>"
+                    "<style>"
+                    "body{font-family:Georgia,serif;max-width:600px;margin:60px auto;color:#222;}"
+                    "h1{color:#c0392b;border-bottom:2px solid #c0392b;padding-bottom:10px;}"
+                    "h2{color:#555;font-size:1rem;margin-top:-10px;margin-bottom:30px;}"
+                    "ul{list-style:none;padding:0;}"
+                    "li{padding:10px 15px;margin:8px 0;background:#fdf6f0;border-left:4px solid #c0392b;border-radius:4px;font-size:1.05rem;}"
+                    ".empty{color:#999;font-style:italic;}"
+                    "@media print{body{margin:20px;}}"
+                    "</style></head><body>"
+                    "<h1>&#127873; Liste de voeux</h1>"
+                    "<h2>" + name + "</h2><ul>";
+
+                if (wishes.empty())
+                    html += "<li class='empty'>Aucun voeu pour l'instant.</li>";
+                else
+                    for (const auto& w : wishes)
+                        html += "<li>" + w.get<std::string>() + "</li>";
+
+                html += "</ul></body></html>";
+
+                std::string filename = "wishlist_" + name + ".html";
+                std::ofstream f(filename);
+                if (f.is_open()) 
+                {
+                    f << html;
+                    f.close();
+                    std::cout << "[OK] Fichier genere : " << filename << " " << std::endl;
+                        ShellExecuteA(NULL, "open", filename.c_str(), NULL, NULL, SW_SHOWNORMAL);
+                }
+                else 
+                {
+                    std::cout << " [ERREUR] Impossible de creer le fichier. ";
+                }
+            }
         }
 
         // ── GET WISHES ──────────────────────────────────────────────────────
