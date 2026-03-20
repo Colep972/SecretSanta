@@ -1,10 +1,12 @@
-﻿#include "httplib.h"
+﻿#define CPPHTTPLIB_OPENSSL_SUPPORT
+#include "httplib.h"
 #include "Crew.h"
 #include "Users.h"
 #include "Save.h"
 #include "Draw.h"
 #include "Mailer.h"
 #include "Profile.h"
+#include "Pot.h"
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <fstream>
@@ -20,7 +22,7 @@ static const std::string DATA_DIR = "ServerData/";
 static const std::string CREWS_DIR = "ServerData/Crews/";
 static const std::string PROFILES_DIR = "ServerData/Profiles/";
 static const std::string INVITES_FILE = DATA_DIR + "invites.json";
-static const std::string ADMIN_TOKEN = "GENIE-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
+static const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,6 +56,7 @@ static std::string hashPassword(const std::string& password)
 }
 
 static std::string crewFile(const std::string& code) { return CREWS_DIR + code + ".json"; }
+static std::string potFile(const std::string& code) { return CREWS_DIR + code + "_pots.json"; }
 static std::string profileFile(const std::string& u) { return PROFILES_DIR + u + ".json"; }
 
 static std::map<std::string, std::string> loadInvites()
@@ -498,6 +501,112 @@ static json handleRequest(const json& req)
         return ok({ {"message","Draw reset"} });
     }
 
+    // ── CREATE_POT ───────────────────────────────────────────────────────────
+    else if (action == "CREATE_POT")
+    {
+        if (!req.contains("invite_code") || !req.contains("admin_token") ||
+            !req.contains("pot_name") || !req.contains("amount"))
+            return err("Missing fields");
+        if (req["admin_token"].get<std::string>() != ADMIN_TOKEN)
+            return err("Invalid admin token");
+
+        std::string code = req["invite_code"].get<std::string>();
+        std::string potName = req["pot_name"].get<std::string>();
+        double amount = req["amount"].get<double>();
+
+        Crew crew("");
+        if (!Save::loadCrew(crew, crewFile(code))) return err("Crew not found");
+
+        std::string creator;
+        if (req.contains("profile_token"))
+        {
+            Profile profile;
+            if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+                return err("Invalid profile token");
+            creator = profile.getName();
+        }
+        else if (req.contains("creator"))
+            creator = req["creator"].get<std::string>();
+        else
+            return err("Missing profile_token or creator");
+
+        std::string potId = generateToken();
+        Pot pot(potId, potName, amount, creator);
+        for (const auto& user : crew.getUsers())
+            pot.addParticipant(user.getName());
+
+        std::vector<Pot> pots;
+        Save::loadPots(pots, potFile(code));
+        pots.push_back(pot);
+        Save::savePots(pots, potFile(code));
+
+        return ok({ {"pot_id", potId}, {"message", "Pot cree"} });
+    }
+
+    // ── GET_POTS ─────────────────────────────────────────────────────────────
+    else if (action == "GET_POTS")
+    {
+        if (!req.contains("invite_code")) return err("Missing invite_code");
+        std::string code = req["invite_code"].get<std::string>();
+
+        std::vector<Pot> pots;
+        Save::loadPots(pots, potFile(code));
+
+        json jpots = json::array();
+        for (const auto& pot : pots)
+        {
+            json jp;
+            jp["id"] = pot.getId();
+            jp["name"] = pot.getName();
+            jp["amount"] = pot.getAmount();
+            jp["creator"] = pot.getCreator();
+            jp["participants"] = json::array();
+            for (const auto& p : pot.getParticipants())
+                jp["participants"].push_back({ {"name", p.name}, {"paid", p.paid} });
+            jpots.push_back(jp);
+        }
+        return ok({ {"pots", jpots} });
+    }
+
+    // ── MARK_PAID ────────────────────────────────────────────────────────────
+    else if (action == "MARK_PAID")
+    {
+        if (!req.contains("invite_code") || !req.contains("pot_id"))
+            return err("Missing fields");
+
+        std::string code = req["invite_code"].get<std::string>();
+        std::string potId = req["pot_id"].get<std::string>();
+        std::string name;
+
+        if (req.contains("profile_token"))
+        {
+            Profile profile;
+            if (!getProfileByToken(req["profile_token"].get<std::string>(), profile))
+                return err("Invalid profile token");
+            name = profile.getName();
+        }
+        else if (req.contains("name"))
+            name = req["name"].get<std::string>();
+        else
+            return err("Missing profile_token or name");
+
+        std::vector<Pot> pots;
+        if (!Save::loadPots(pots, potFile(code))) return err("No pots found");
+
+        for (auto& pot : pots)
+        {
+            if (pot.getId() == potId)
+            {
+                if (!pot.hasMember(name)) return err("Not a participant of this pot");
+                if (pot.hasPaid(name))    return err("Already marked as paid");
+                pot.markPaid(name);
+                Save::savePots(pots, potFile(code));
+                return ok({ {"message", "Marque comme paye"} });
+            }
+        }
+        return err("Pot not found");
+    }
+
     return err("Unknown action: " + action);
 }
 
@@ -510,7 +619,10 @@ int main()
     std::filesystem::create_directories(CREWS_DIR);
     std::filesystem::create_directories(PROFILES_DIR);
 
-    httplib::Server svr;
+    httplib::SSLServer svr(
+        "/etc/letsencrypt/live/santa.colep.fr/fullchain.pem",
+        "/etc/letsencrypt/live/santa.colep.fr/privkey.pem"
+    );
 
     svr.Post("/api", [](const httplib::Request& req, httplib::Response& res) {
         json response;

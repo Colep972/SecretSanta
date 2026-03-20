@@ -1,9 +1,11 @@
 #pragma once
 #include <string>
 #include <map>
+#include <vector>
 #include "Crew.h"
 #include "Users.h"
 #include "Profile.h"
+#include "Pot.h"
 
 class Save
 {
@@ -22,4 +24,7 @@ public:
 
     static bool saveProfile(const Profile& profile, const std::string& filename);
     static bool loadProfile(Profile& profile, const std::string& filename);
+
+    static bool savePots(const std::vector<Pot>& pots, const std::string& filename);
+    static bool loadPots(std::vector<Pot>& pots, const std::string& filename);
 };

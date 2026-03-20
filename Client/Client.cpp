@@ -11,6 +11,47 @@
 
 using json = nlohmann::json;
 
+// ---------------------------------------------------------------------------
+// Input helpers
+// ---------------------------------------------------------------------------
+
+static int readInt(const std::string& prompt)
+{
+    int value;
+    while (true)
+    {
+        std::cout << prompt;
+        if (std::cin >> value)
+        {
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return value;
+        }
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        std::cout << "  Entree invalide, veuillez entrer un nombre.\n";
+    }
+}
+
+static std::string readString(const std::string& prompt)
+{
+    std::string value;
+    while (true)
+    {
+        std::cout << prompt;
+        std::getline(std::cin, value);
+        if (!value.empty()) return value;
+        std::cout << "  Entree invalide, veuillez entrer une valeur.\n";
+    }
+}
+
+static std::string readOptionalString(const std::string& prompt)
+{
+    std::cout << prompt;
+    std::string value;
+    std::getline(std::cin, value);
+    return value;
+}
+
 static const std::string ADMIN_TOKEN = "GENIE-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
 
 // Session state
@@ -108,35 +149,33 @@ static void profileMenu()
         std::cout << "  1. Creer un profil\n";
         std::cout << "  2. Se connecter\n";
         std::cout << "  3. Continuer sans profil\n";
-        std::cout << "  --. Quitter\n";
-        std::cout << "  Choix : ";
+        std::cout << "  4. Quitter\n";
+        int choice = readInt("  Choix : ");
 
-        int choice;
-        std::cin >> choice;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        if (choice == 1)
+        if (choice == 4)
+        {
+            exit(0);
+        }
+        else if (choice == 1)
         {
             std::string username, password, name, email;
-            std::cout << "Nom d'utilisateur : "; std::getline(std::cin, username);
-            std::cout << "Mot de passe      : "; std::getline(std::cin, password);
+            username = readString("Nom d'utilisateur : ");
+            password = readString("Mot de passe      : ");
 
             if (!m_name.empty()) {
-                std::cout << "Votre nom [" << m_name << "] (Entree pour confirmer) : ";
-                std::string input; std::getline(std::cin, input);
+                std::string input = readOptionalString("Votre nom [" + m_name + "] (Entree pour confirmer) : ");
                 name = input.empty() ? m_name : input;
             }
             else {
-                std::cout << "Votre nom   : "; std::getline(std::cin, name);
+                name = readString("Votre nom   : ");
             }
 
             if (!m_email.empty()) {
-                std::cout << "Votre email [" << m_email << "] (Entree pour confirmer) : ";
-                std::string input; std::getline(std::cin, input);
+                std::string input = readOptionalString("Votre email [" + m_email + "] (Entree pour confirmer) : ");
                 email = input.empty() ? m_email : input;
             }
-            else 
-            {
-                std::cout << "Votre email : "; std::getline(std::cin, email);
+            else {
+                email = readString("Votre email : ");
             }
 
             json req;
@@ -169,8 +208,8 @@ static void profileMenu()
         else if (choice == 2)
         {
             std::string username, password;
-            std::cout << "Nom d'utilisateur : "; std::getline(std::cin, username);
-            std::cout << "Mot de passe      : "; std::getline(std::cin, password);
+            username = readString("Nom d'utilisateur : ");
+            password = readString("Mot de passe      : ");
 
             json req;
             req["action"] = "LOGIN_PROFILE";
@@ -199,10 +238,6 @@ static void profileMenu()
         {
             return;
         }
-        else if (choice == 4)
-        {
-            exit(0);
-        }
     }
 }
 
@@ -227,7 +262,6 @@ int main()
             << (m_isAdmin ? " | admin" : "")
             << "]\n\n";
 
-        // Build menu dynamically with sequential numbers
         int opt = 1;
         std::map<int, std::string> menu;
 
@@ -248,65 +282,66 @@ int main()
             menu[opt++] = "REMOVE_WISH";
             menu[opt++] = "GET_PROFILE";
         }
+        if (!m_inviteCode.empty()) {
+            menu[opt++] = "GET_POTS";
+            menu[opt++] = "MARK_PAID";
+        }
         if (m_isAdmin) {
+            menu[opt++] = "CREATE_POT";
             menu[opt++] = "REMOVE_PARTICIPANT";
             if (m_drawDone)
                 menu[opt++] = "RESET_DRAW";
         }
-        int quitOpt = opt;
         menu[opt++] = "QUIT";
 
-        // Print menu
         static const std::map<std::string, std::string> labels = {
-            {"CREATE_CREW",        "Creer un crew"},
-            {"LOGIN_CREW",         "Se connecter a un crew"},
-            {"JOIN_CREW",          "Rejoindre un crew"},
-            {"RUN_DRAW",           "Lancer le tirage"},
-            {"SEND_EMAILS",        "Envoyer les emails"},
-            {"GET_WISHES",         "Voir ma liste de voeux"},
-            {"EXPORT_WISHLIST",    "Exporter ma liste de voeux (HTML)"},
-            {"ADD_WISH",           "Ajouter un voeu"},
-            {"REMOVE_WISH",        "Supprimer un voeu"},
-            {"GET_PROFILE",        "Voir mon profil"},
-            {"REMOVE_PARTICIPANT", "Retirer un participant"},
-            {"RESET_DRAW",         "Reinitialiser le tirage"},
-            {"QUIT",               "Quitter"},
+            {"CREATE_CREW",         "Creer un crew"},
+            {"LOGIN_CREW",          "Se connecter a un crew"},
+            {"JOIN_CREW",           "Rejoindre un crew"},
+            {"RUN_DRAW",            "Lancer le tirage"},
+            {"SEND_EMAILS",         "Envoyer les emails"},
+            {"GET_WISHES",          "Voir ma liste de voeux"},
+            {"EXPORT_WISHLIST",     "Exporter ma liste de voeux (HTML)"},
+            {"ADD_WISH",            "Ajouter un voeu"},
+            {"REMOVE_WISH",         "Supprimer un voeu"},
+            {"GET_PROFILE",         "Voir mon profil"},
+            {"REMOVE_PARTICIPANT",  "Retirer un participant"},
+            {"CREATE_POT",          "Creer un pot"},
+            {"GET_POTS",            "Voir les pots"},
+            {"MARK_PAID",           "Marquer comme paye"},
+            {"RESET_DRAW",          "Reinitialiser le tirage"},
+            {"QUIT",                "Quitter"},
             {"CREATE_PROFILE_MAIN", "Creer / Se connecter a un profil"},
         };
 
         for (const auto& entry : menu)
             std::cout << "  " << entry.first << ". " << labels.at(entry.second) << "\n";
 
-        std::cout << "  Choix : ";
-        int choice;
-        std::cin >> choice;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        int choice = readInt("  Choix : ");
 
         if (menu.find(choice) == menu.end()) continue;
         std::string action = menu[choice];
 
-        // ── CREATE PROFILE FROM MAIN MENU ───────────────────────────────────
+        // ── CREATE PROFILE FROM MAIN MENU ────────────────────────────────────
         if (action == "CREATE_PROFILE_MAIN")
         {
             profileMenu();
         }
 
-        // ── QUIT ────────────────────────────────────────────────────────────
+        // ── QUIT ─────────────────────────────────────────────────────────────
         else if (action == "QUIT")
         {
             running = false;
         }
 
-        // ── CREATE CREW ─────────────────────────────────────────────────────
+        // ── CREATE CREW ──────────────────────────────────────────────────────
         else if (action == "CREATE_CREW")
         {
-            std::string crewName;
-            std::cout << "Nom du crew : "; std::getline(std::cin, crewName);
+            std::string crewName = readString("Nom du crew : ");
 
-            // Without profile: ask for name and email
             if (m_profileToken.empty() && m_name.empty()) {
-                std::cout << "Votre nom   : "; std::getline(std::cin, m_name);
-                std::cout << "Votre email : "; std::getline(std::cin, m_email);
+                m_name = readString("Votre nom   : ");
+                m_email = readString("Votre email : ");
             }
 
             json req;
@@ -328,16 +363,13 @@ int main()
             }
         }
 
-        // ── LOGIN CREW ──────────────────────────────────────────────────────
+        // ── LOGIN CREW ───────────────────────────────────────────────────────
         else if (action == "LOGIN_CREW")
         {
-            std::string code;
-            std::cout << "Code du crew : "; std::getline(std::cin, code);
+            std::string code = readString("Code du crew : ");
 
-            // Without profile: ask for name if not known
-            if (m_profileToken.empty() && m_name.empty()) {
-                std::cout << "Votre nom   : "; std::getline(std::cin, m_name);
-            }
+            if (m_profileToken.empty() && m_name.empty())
+                m_name = readString("Votre nom   : ");
 
             json req;
             req["action"] = "LOGIN_CREW";
@@ -358,16 +390,14 @@ int main()
             }
         }
 
-        // ── JOIN CREW ───────────────────────────────────────────────────────
+        // ── JOIN CREW ────────────────────────────────────────────────────────
         else if (action == "JOIN_CREW")
         {
-            std::string code;
-            std::cout << "Code du crew : "; std::getline(std::cin, code);
+            std::string code = readString("Code du crew : ");
 
-            // Without profile: ask for name and email if not known
             if (m_profileToken.empty() && m_name.empty()) {
-                std::cout << "Votre nom   : "; std::getline(std::cin, m_name);
-                std::cout << "Votre email : "; std::getline(std::cin, m_email);
+                m_name = readString("Votre nom   : ");
+                m_email = readString("Votre email : ");
             }
 
             json req;
@@ -389,7 +419,7 @@ int main()
             }
         }
 
-        // ── RUN DRAW ────────────────────────────────────────────────────────
+        // ── RUN DRAW ─────────────────────────────────────────────────────────
         else if (action == "RUN_DRAW")
         {
             json req;
@@ -401,7 +431,7 @@ int main()
             if (res["status"] == "OK") refreshCrewStatus();
         }
 
-        // ── SEND EMAILS ─────────────────────────────────────────────────────
+        // ── SEND EMAILS ──────────────────────────────────────────────────────
         else if (action == "SEND_EMAILS")
         {
             json req;
@@ -411,7 +441,7 @@ int main()
             printResponse(call(req));
         }
 
-        // ── EXPORT WISHLIST ─────────────────────────────────────────────────
+        // ── EXPORT WISHLIST ──────────────────────────────────────────────────
         else if (action == "EXPORT_WISHLIST")
         {
             json req;
@@ -450,21 +480,19 @@ int main()
 
                 std::string filename = "wishlist_" + name + ".html";
                 std::ofstream f(filename);
-                if (f.is_open()) 
-                {
+                if (f.is_open()) {
                     f << html;
                     f.close();
-                    std::cout << "[OK] Fichier genere : " << filename << " " << std::endl;
-                        ShellExecuteA(NULL, "open", filename.c_str(), NULL, NULL, SW_SHOWNORMAL);
+                    std::cout << "[OK] Fichier genere : " << filename << "\n";
+                    ShellExecuteA(NULL, "open", filename.c_str(), NULL, NULL, SW_SHOWNORMAL);
                 }
-                else 
-                {
-                    std::cout << " [ERREUR] Impossible de creer le fichier. ";
+                else {
+                    std::cout << "[ERREUR] Impossible de creer le fichier.\n";
                 }
             }
         }
 
-        // ── GET WISHES ──────────────────────────────────────────────────────
+        // ── GET WISHES ───────────────────────────────────────────────────────
         else if (action == "GET_WISHES")
         {
             json req;
@@ -473,11 +501,10 @@ int main()
             printResponse(call(req));
         }
 
-        // ── ADD WISH ────────────────────────────────────────────────────────
+        // ── ADD WISH ─────────────────────────────────────────────────────────
         else if (action == "ADD_WISH")
         {
-            std::string wish;
-            std::cout << "Votre voeu : "; std::getline(std::cin, wish);
+            std::string wish = readString("Votre voeu : ");
 
             json req;
             req["action"] = "ADD_WISH";
@@ -486,7 +513,7 @@ int main()
             printResponse(call(req));
         }
 
-        // ── REMOVE WISH ─────────────────────────────────────────────────────
+        // ── REMOVE WISH ──────────────────────────────────────────────────────
         else if (action == "REMOVE_WISH")
         {
             json getReq;
@@ -499,10 +526,7 @@ int main()
                 std::cout << "  Aucun voeu a supprimer.\n"; continue;
             }
 
-            int index;
-            std::cout << "Index a supprimer : ";
-            std::cin >> index;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            int index = readInt("Index a supprimer : ");
 
             json req;
             req["action"] = "REMOVE_WISH";
@@ -511,12 +535,99 @@ int main()
             printResponse(call(req));
         }
 
-        // ── GET PROFILE ─────────────────────────────────────────────────────
+        // ── GET PROFILE ──────────────────────────────────────────────────────
         else if (action == "GET_PROFILE")
         {
             json req;
             req["action"] = "GET_PROFILE";
             req["profile_token"] = m_profileToken;
+            printResponse(call(req));
+        }
+
+        // ── GET POTS ─────────────────────────────────────────────────────────
+        else if (action == "GET_POTS")
+        {
+            json req;
+            req["action"] = "GET_POTS";
+            req["invite_code"] = m_inviteCode;
+            json res = call(req);
+
+            if (res["status"] != "OK") { printResponse(res); }
+            else
+            {
+                auto& pots = res["pots"];
+                if (pots.empty()) {
+                    std::cout << "  Aucun pot pour ce crew.\n";
+                }
+                else {
+                    for (const auto& pot : pots)
+                    {
+                        std::cout << "\n  [Pot] " << pot["name"].get<std::string>()
+                            << " - " << pot["amount"].get<double>() << " EUR/pers"
+                            << " (cree par " << pot["creator"].get<std::string>() << ")\n";
+                        std::cout << "  ID: " << pot["id"].get<std::string>() << "\n";
+                        for (const auto& p : pot["participants"])
+                            std::cout << "    " << (p["paid"].get<bool>() ? "[X] " : "[ ] ")
+                            << p["name"].get<std::string>() << "\n";
+                    }
+                }
+            }
+        }
+
+        // ── CREATE POT ───────────────────────────────────────────────────────
+        else if (action == "CREATE_POT")
+        {
+            std::string potName = readString("Nom du pot : ");
+            std::string amountStr = readString("Montant par personne (EUR) : ");
+            double amount = std::stod(amountStr);
+
+            json req;
+            req["action"] = "CREATE_POT";
+            req["invite_code"] = m_inviteCode;
+            req["admin_token"] = ADMIN_TOKEN;
+            req["pot_name"] = potName;
+            req["amount"] = amount;
+            if (!m_profileToken.empty())
+                req["profile_token"] = m_profileToken;
+            else
+                req["creator"] = m_name;
+            printResponse(call(req));
+        }
+
+        // ── MARK PAID ────────────────────────────────────────────────────────
+        else if (action == "MARK_PAID")
+        {
+            json getReq;
+            getReq["action"] = "GET_POTS";
+            getReq["invite_code"] = m_inviteCode;
+            json getRes = call(getReq);
+
+            if (getRes["status"] != "OK" || getRes["pots"].empty()) {
+                std::cout << "  Aucun pot disponible.\n"; continue;
+            }
+
+            for (const auto& pot : getRes["pots"])
+                std::cout << "  " << pot["id"].get<std::string>().substr(0, 8)
+                << "... - " << pot["name"].get<std::string>() << "\n";
+
+            std::string potId = readString("ID du pot (premiers caracteres) : ");
+
+            std::string fullId;
+            for (const auto& pot : getRes["pots"])
+            {
+                std::string id = pot["id"].get<std::string>();
+                if (id.substr(0, potId.size()) == potId) { fullId = id; break; }
+            }
+            if (fullId.empty()) { std::cout << "  Pot introuvable.\n"; continue; }
+
+            json req;
+            req["action"] = "MARK_PAID";
+            req["invite_code"] = m_inviteCode;
+            req["pot_id"] = fullId;
+            if (!m_profileToken.empty())
+                req["profile_token"] = m_profileToken;
+            else
+                req["name"] = m_name;
             printResponse(call(req));
         }
 
@@ -528,9 +639,7 @@ int main()
             listReq["invite_code"] = m_inviteCode;
             printResponse(call(listReq));
 
-            std::string name;
-            std::cout << "Nom du participant a retirer : ";
-            std::getline(std::cin, name);
+            std::string name = readString("Nom du participant a retirer : ");
 
             json req;
             req["action"] = "REMOVE_PARTICIPANT";
@@ -546,9 +655,7 @@ int main()
         // ── RESET DRAW ───────────────────────────────────────────────────────
         else if (action == "RESET_DRAW")
         {
-            std::cout << "  Attention : les emails ont peut-etre deja ete envoyes. Continuer ? (o/n) : ";
-            char c; std::cin >> c;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            char c = readString("  Attention : les emails ont peut-etre deja ete envoyes. Continuer ? (o/n) : ")[0];
             if (c != 'o' && c != 'O') continue;
 
             json req;
