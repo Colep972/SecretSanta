@@ -23,6 +23,8 @@ static const std::string CREWS_DIR = "ServerData/Crews/";
 static const std::string PROFILES_DIR = "ServerData/Profiles/";
 static const std::string INVITES_FILE = DATA_DIR + "invites.json";
 static const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
+static const std::string APP_VERSION = "1.0.0";
+static const std::string CLIENT_EXE = "Client.exe";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -103,6 +105,10 @@ static json handleRequest(const json& req)
     // ── PING ────────────────────────────────────────────────────────────────
     if (action == "PING")
         return ok({ {"message","pong"} });
+
+    // ── GET_VERSION ──────────────────────────────────────────────────────────
+    else if (action == "GET_VERSION")
+        return ok({ {"version", APP_VERSION} });
 
     // ── CREATE_PROFILE ───────────────────────────────────────────────────────
     else if (action == "CREATE_PROFILE")
@@ -623,6 +629,25 @@ int main()
         "/etc/letsencrypt/live/santa.colep.fr/fullchain.pem",
         "/etc/letsencrypt/live/santa.colep.fr/privkey.pem"
     );
+
+    svr.Get("/version", [](const httplib::Request&, httplib::Response& res) {
+        json j;
+        j["version"] = APP_VERSION;
+        res.set_content(j.dump(), "application/json");
+        });
+
+    svr.Get("/download", [](const httplib::Request&, httplib::Response& res) {
+        std::ifstream file(CLIENT_EXE, std::ios::binary);
+        if (!file.is_open()) {
+            res.status = 404;
+            res.set_content("Not found", "text/plain");
+            return;
+        }
+        std::string content((std::istreambuf_iterator<char>(file)),
+            std::istreambuf_iterator<char>());
+        res.set_content(content, "application/octet-stream");
+        res.set_header("Content-Disposition", "attachment; filename=Client.exe");
+        });
 
     svr.Post("/api", [](const httplib::Request& req, httplib::Response& res) {
         json response;

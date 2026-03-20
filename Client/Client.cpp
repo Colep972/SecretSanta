@@ -1,4 +1,5 @@
 ﻿#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <iostream>
 #include <fstream>
 #include <limits>
@@ -6,6 +7,8 @@
 #include <string>
 #include <windows.h>
 #include <shellapi.h>
+#include <urlmon.h>
+#pragma comment(lib, "urlmon.lib")
 #include "NetworkUtils.h"
 #include "../external/json.hpp"
 
@@ -53,6 +56,47 @@ static std::string readOptionalString(const std::string& prompt)
 }
 
 static const std::string ADMIN_TOKEN = "GENIE-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
+static const std::string APP_VERSION = "1.0.0";
+
+// ---------------------------------------------------------------------------
+// Auto-update
+// ---------------------------------------------------------------------------
+
+static void checkForUpdate()
+{
+    try
+    {
+        // Check version from server
+        json req;
+        req["action"] = "GET_VERSION";
+        json res = sendRequest(req);
+
+        if (res["status"] != "OK") return;
+        std::string serverVersion = res.value("version", "");
+        if (serverVersion.empty() || serverVersion == APP_VERSION) return;
+
+        std::cout << "  Mise a jour disponible (" << serverVersion << "), telechargement...\n";
+
+        // Download new exe using Windows URLDownloadToFile
+        std::wstring url = L"https://santa.colep.fr/download";
+        HRESULT hr = URLDownloadToFileW(NULL, url.c_str(), L"Client_new.exe", 0, NULL);
+        if (FAILED(hr)) return;
+
+        // Write updater batch script
+        std::ofstream bat("updater.bat");
+        bat << "@echo off\r\n";
+        bat << "timeout /t 2 /nobreak > nul\r\n";
+        bat << "move /y Client_new.exe Client.exe\r\n";
+        bat << "start Client.exe\r\n";
+        bat << "del updater.bat\r\n";
+        bat.close();
+
+        // Launch updater and exit
+        ShellExecuteA(NULL, "open", "updater.bat", NULL, NULL, SW_HIDE);
+        exit(0);
+    }
+    catch (...) {}
+}
 
 // Session state
 static std::string m_profileToken;
@@ -249,6 +293,8 @@ int main()
 {
     std::cout << "Genie - santa.colep.fr\n";
 
+    checkForUpdate();
+
     profileMenu();
 
     bool running = true;
@@ -283,6 +329,7 @@ int main()
             menu[opt++] = "GET_PROFILE";
         }
         if (!m_inviteCode.empty()) {
+            menu[opt++] = "GET_PARTICIPANTS";
             menu[opt++] = "GET_POTS";
             menu[opt++] = "MARK_PAID";
         }
@@ -307,6 +354,7 @@ int main()
             {"GET_PROFILE",         "Voir mon profil"},
             {"REMOVE_PARTICIPANT",  "Retirer un participant"},
             {"CREATE_POT",          "Creer un pot"},
+            {"GET_PARTICIPANTS",    "Voir les participants"},
             {"GET_POTS",            "Voir les pots"},
             {"MARK_PAID",           "Marquer comme paye"},
             {"RESET_DRAW",          "Reinitialiser le tirage"},
@@ -541,6 +589,15 @@ int main()
             json req;
             req["action"] = "GET_PROFILE";
             req["profile_token"] = m_profileToken;
+            printResponse(call(req));
+        }
+
+        // ── GET PARTICIPANTS ─────────────────────────────────────────────────
+        else if (action == "GET_PARTICIPANTS")
+        {
+            json req;
+            req["action"] = "GET_PARTICIPANTS";
+            req["invite_code"] = m_inviteCode;
             printResponse(call(req));
         }
 
