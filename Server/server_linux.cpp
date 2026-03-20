@@ -625,10 +625,7 @@ int main()
     std::filesystem::create_directories(CREWS_DIR);
     std::filesystem::create_directories(PROFILES_DIR);
 
-    httplib::SSLServer svr(
-        "/etc/letsencrypt/live/santa.colep.fr/fullchain.pem",
-        "/etc/letsencrypt/live/santa.colep.fr/privkey.pem"
-    );
+    httplib::Server svr;
 
     svr.Get("/version", [](const httplib::Request&, httplib::Response& res) {
         json j;
@@ -661,7 +658,7 @@ int main()
         res.set_content(response.dump(), "application/json");
         });
 
-    std::cout << "SecretSanta HTTPS server on port 8443..." << std::endl;
+    std::cout << "Genie HTTP server on port 8443..." << std::endl;
     svr.listen("0.0.0.0", 8443);
     return 0;
 }
