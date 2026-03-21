@@ -2,10 +2,8 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <set>
 #include <mutex>
 #include <thread>
-#include <functional>
 
 struct ChatMessage
 {
@@ -24,7 +22,6 @@ public:
     void start();
     void stop();
 
-    // Called by lws callback
     void onConnect(void* wsi, const std::string& crewCode, const std::string& name);
     void onDisconnect(void* wsi);
     void onMessage(void* wsi, const std::string& message);
@@ -32,21 +29,18 @@ public:
 
     static ChatServer* instance;
 
+    // Public so lws_callback can access them
+    struct ClientInfo { std::string crewCode; std::string name; };
+    std::mutex m_mutex;
+    std::map<void*, ClientInfo> m_clients;
+    std::map<void*, std::vector<std::string>> m_writeQueues;
+
 private:
     int m_port;
     std::string m_dataDir;
     std::thread m_thread;
     bool m_running = false;
     struct lws_context* m_context = nullptr;
-
-    std::mutex m_mutex;
-
-    // wsi -> {crewCode, name}
-    struct ClientInfo { std::string crewCode; std::string name; };
-    std::map<void*, ClientInfo> m_clients;
-
-    // wsi -> pending write buffers
-    std::map<void*, std::vector<std::string>> m_writeQueues;
 
     void saveMessage(const ChatMessage& msg);
     std::string currentTimestamp();

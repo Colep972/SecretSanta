@@ -25,7 +25,6 @@ static int ws_callback(struct lws* wsi, enum lws_callback_reasons reason,
     switch (reason)
     {
     case LWS_CALLBACK_ESTABLISHED:
-        // Client connected — wait for JOIN message
         break;
 
     case LWS_CALLBACK_CLOSED:
@@ -62,7 +61,7 @@ static int ws_callback(struct lws* wsi, enum lws_callback_reasons reason,
 
 static struct lws_protocols protocols[] = {
     { "genie-chat", ws_callback, 0, 65536, 0, nullptr, 0 },
-    LWS_PROTOCOL_LIST_TERM
+    { nullptr, nullptr, 0, 0, 0, nullptr, 0 }
 };
 
 // ---------------------------------------------------------------------------
@@ -88,7 +87,6 @@ void ChatServer::start()
             struct lws_context_creation_info info = {};
             info.port = m_port;
             info.protocols = protocols;
-            info.options = LWS_SERVER_OPTION_HTTP_HEADERS_SECURITY_BEST_PRACTICES_ENFORCE;
 
             m_context = lws_create_context(&info);
             if (!m_context) { std::cerr << "Failed to create LWS context\n"; return; }
@@ -143,7 +141,6 @@ void ChatServer::onDisconnect(void* wsi)
         m_clients.erase(it);
         m_writeQueues.erase(wsi);
 
-        // Notify others
         json out;
         out["type"] = "system";
         out["text"] = name + " a quitte le chat.";
@@ -164,7 +161,6 @@ void ChatServer::onMessage(void* wsi, const std::string& message)
             std::string name = j["name"].get<std::string>();
             onConnect(wsi, crewCode, name);
 
-            // Notify others
             json out;
             out["type"] = "system";
             out["text"] = name + " a rejoint le chat.";
@@ -181,11 +177,9 @@ void ChatServer::onMessage(void* wsi, const std::string& message)
             std::string text = j["text"].get<std::string>();
             std::string ts = currentTimestamp();
 
-            // Save message
             ChatMessage msg{ sender, text, ts, crewCode };
             saveMessage(msg);
 
-            // Broadcast
             json out;
             out["type"] = "message";
             out["sender"] = sender;
