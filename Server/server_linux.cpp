@@ -45,7 +45,7 @@ static std::string generateInviteCode()
     static const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     static std::mt19937 rng(std::random_device{}());
     static std::uniform_int_distribution<int> dist(0, sizeof(charset) - 2);
-    std::string code = "SANTA-";
+    std::string code = "GENIE-";
     for (int i = 0; i < 6; ++i) code += charset[dist(rng)];
     return code;
 }
