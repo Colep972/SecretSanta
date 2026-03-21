@@ -24,8 +24,6 @@ out/
 *.ilk
 *.exp
 *.lib
-*.dll
-*.exe
 *.iobj
 *.ipdb
 

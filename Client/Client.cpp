@@ -1,5 +1,6 @@
 ﻿#define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
+#include <atomic>
 #include <iostream>
 #include <fstream>
 #include <limits>
@@ -9,6 +10,7 @@
 #include <shellapi.h>
 #include <urlmon.h>
 #pragma comment(lib, "urlmon.lib")
+#include <ixwebsocket/IXWebSocket.h>
 #include "NetworkUtils.h"
 #include "../external/json.hpp"
 
@@ -56,7 +58,7 @@ static std::string readOptionalString(const std::string& prompt)
 }
 
 static const std::string ADMIN_TOKEN = "GENIE-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
-static const std::string APP_VERSION = "1.0.0";
+static const std::string APP_VERSION = "1.0.1";
 
 // ---------------------------------------------------------------------------
 // Auto-update
@@ -330,6 +332,7 @@ int main()
         }
         if (!m_inviteCode.empty()) {
             menu[opt++] = "GET_PARTICIPANTS";
+            menu[opt++] = "CHAT";
             menu[opt++] = "GET_POTS";
             menu[opt++] = "MARK_PAID";
         }
@@ -355,6 +358,7 @@ int main()
             {"REMOVE_PARTICIPANT",  "Retirer un participant"},
             {"CREATE_POT",          "Creer un pot"},
             {"GET_PARTICIPANTS",    "Voir les participants"},
+            {"CHAT",                "Chat du crew"},
             {"GET_POTS",            "Voir les pots"},
             {"MARK_PAID",           "Marquer comme paye"},
             {"RESET_DRAW",          "Reinitialiser le tirage"},
@@ -590,6 +594,73 @@ int main()
             req["action"] = "GET_PROFILE";
             req["profile_token"] = m_profileToken;
             printResponse(call(req));
+        }
+
+        // ── CHAT ─────────────────────────────────────────────────────────────
+        else if (action == "CHAT")
+        {
+            std::string name = m_name.empty() ? "Inconnu" : m_name;
+
+            ix::WebSocket ws;
+            std::string url = "wss://chat.colep.fr";
+            ws.setUrl(url);
+
+            std::atomic<bool> chatRunning(true);
+
+            ws.setOnMessageCallback([&](const ix::WebSocketMessagePtr& msg)
+                {
+                    if (msg->type == ix::WebSocketMessageType::Open)
+                    {
+                        // Send join message
+                        json join;
+                        join["type"] = "join";
+                        join["crew_code"] = m_inviteCode;
+                        join["name"] = name;
+                        ws.send(join.dump());
+                    }
+                    else if (msg->type == ix::WebSocketMessageType::Message)
+                    {
+                        try
+                        {
+                            json j = json::parse(msg->str);
+                            std::string type = j.value("type", "");
+                            if (type == "message")
+                                std::cout << "\n  [" << j["timestamp"].get<std::string>() << "] "
+                                << j["sender"].get<std::string>() << ": "
+                                << j["text"].get<std::string>() << "\n  > ";
+                            else if (type == "system")
+                                std::cout << "\n  ** " << j["text"].get<std::string>() << " **\n  > ";
+                            std::cout.flush();
+                        }
+                        catch (...) {}
+                    }
+                    else if (msg->type == ix::WebSocketMessageType::Close ||
+                        msg->type == ix::WebSocketMessageType::Error)
+                    {
+                        chatRunning = false;
+                    }
+                });
+
+            ws.start();
+
+            std::cout << "  Chat du crew " << m_inviteCode << " (tapez /quit pour quitter)\n";
+
+            while (chatRunning)
+            {
+                std::cout << "  > ";
+                std::string line;
+                std::getline(std::cin, line);
+                if (line == "/quit") break;
+                if (line.empty()) continue;
+
+                json msg;
+                msg["type"] = "message";
+                msg["text"] = line;
+                ws.send(msg.dump());
+            }
+
+            ws.stop();
+            std::cout << "  Chat ferme.\n";
         }
 
         // ── GET PARTICIPANTS ─────────────────────────────────────────────────

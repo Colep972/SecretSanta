@@ -7,6 +7,7 @@
 #include "Mailer.h"
 #include "Profile.h"
 #include "Pot.h"
+#include "ChatServer.h"
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <fstream>
@@ -22,7 +23,7 @@ static const std::string DATA_DIR = "ServerData/";
 static const std::string CREWS_DIR = "ServerData/Crews/";
 static const std::string PROFILES_DIR = "ServerData/Profiles/";
 static const std::string INVITES_FILE = DATA_DIR + "invites.json";
-static const std::string ADMIN_TOKEN = "SANTA-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
+static const std::string ADMIN_TOKEN = "GENIE-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
 static const std::string APP_VERSION = "1.0.1";
 static const std::string CLIENT_EXE = "Client.exe";
 
@@ -625,7 +626,14 @@ int main()
     std::filesystem::create_directories(CREWS_DIR);
     std::filesystem::create_directories(PROFILES_DIR);
 
-    httplib::Server svr;
+    httplib::SSLServer svr(
+        "/etc/letsencrypt/live/santa.colep.fr/fullchain.pem",
+        "/etc/letsencrypt/live/santa.colep.fr/privkey.pem"
+    );
+
+    // Start WebSocket chat server
+    ChatServer chatServer(8445, CREWS_DIR);
+    chatServer.start();
 
     svr.Get("/version", [](const httplib::Request&, httplib::Response& res) {
         json j;
@@ -658,7 +666,7 @@ int main()
         res.set_content(response.dump(), "application/json");
         });
 
-    std::cout << "Genie HTTP server on port 8443..." << std::endl;
+    std::cout << "Genie HTTPS server on port 8443..." << std::endl;
     svr.listen("0.0.0.0", 8443);
     return 0;
 }
