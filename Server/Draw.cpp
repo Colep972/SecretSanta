@@ -13,8 +13,9 @@ bool Draw::run(const Crew& crew)
     const auto& users = crew.getUsers();
     int nbParticipants = users.size();
 
-    if (nbParticipants < 2)
+    if (nbParticipants < 3)
     {
+        std::cout << "Il n'y a pas assez de participants (3 minimum)" << std::endl;
         return false;
     }
 

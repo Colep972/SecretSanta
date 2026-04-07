@@ -58,7 +58,7 @@ static std::string readOptionalString(const std::string& prompt)
 }
 
 static const std::string ADMIN_TOKEN = "GENIE-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
-static const std::string APP_VERSION = "1.0.1";
+static const std::string APP_VERSION = "1.0.2";
 
 // ---------------------------------------------------------------------------
 // Auto-update

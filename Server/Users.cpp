@@ -1,4 +1,5 @@
 #include "Users.h"
+#include <iostream>
 
 Users::Users(const std::string& name, const std::string& email)
     : m_name(name), m_email(email)
@@ -21,7 +22,10 @@ void Users::addWish(const std::string& wish)
 bool Users::removeWish(int index)
 {
     if (index < 0 || index >= (int)m_wishes.size())
+    {
+        std::cout << "Il n'y a pas de voeux correspondant" << std::endl;
         return false;
+    }
     m_wishes.erase(m_wishes.begin() + index);
     return true;
 }

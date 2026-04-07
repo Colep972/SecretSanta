@@ -24,7 +24,7 @@ static const std::string CREWS_DIR = "ServerData/Crews/";
 static const std::string PROFILES_DIR = "ServerData/Profiles/";
 static const std::string INVITES_FILE = DATA_DIR + "invites.json";
 static const std::string ADMIN_TOKEN = "GENIE-ADMIN-I-KNOW-COLEP-972-/-MATHIEU";
-static const std::string APP_VERSION = "1.0.1";
+static const std::string APP_VERSION = "1.0.2";
 static const std::string CLIENT_EXE = "Client.exe";
 
 // ---------------------------------------------------------------------------
